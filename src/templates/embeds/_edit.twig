@@ -1,0 +1,467 @@
+{% extends "_layouts/cp.twig" %}
+{% import "_includes/forms.twig" as forms %}
+
+{% set fullPageForm = canManage %}
+{% set crumbs = [
+    { label: "Eye"|t('eye'), url: url('eye') },
+    { label: "Embeds"|t('eye'), url: url('eye/embeds') },
+] %}
+{% set selectedSubnavItem = 'embeds' %}
+
+{% do view.registerAssetBundle('justinholtweb\\eye\\web\\assets\\editor\\EditorAsset') %}
+
+{% block actionButton %}
+    {% if canManage %}
+        <div class="buttons">
+            <button type="submit" class="btn submit">{{ "Save"|t('app') }}</button>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    <input type="hidden" name="action" value="eye/embeds/save">
+    {{ redirectInput('eye/embeds') }}
+    {% if embed.id %}<input type="hidden" name="embedId" value="{{ embed.id }}">{% endif %}
+
+    <div id="eye-edit" data-resolve-url="{{ actionUrl('eye/embeds/resolve') }}" data-check-url="{{ actionUrl('eye/embeds/check') }}" data-preview-url="{{ actionUrl('eye/embeds/preview') }}" data-embed-id="{{ embed.id ?? '' }}">
+
+        {{ forms.textField({
+            first: true,
+            label: "Title"|t('app'),
+            id: 'title',
+            name: 'title',
+            value: embed.title,
+            errors: embed.getErrors('title'),
+            autofocus: true,
+        }) }}
+
+        {{ forms.textField({
+            label: "URL"|t('eye'),
+            instructions: "Paste the page, video or map you want to embed. Eye works out the rest."|t('eye'),
+            id: 'url',
+            name: 'url',
+            value: embed.url,
+            type: 'url',
+            placeholder: 'https://…',
+            class: 'code',
+            errors: embed.getErrors('url'),
+            required: true,
+        }) }}
+
+        <div id="eye-provider" class="eye-edit__provider {{ not match ? 'hidden' }}">
+            <span class="eye-edit__provider-name">{{ match ? match.provider.name : '' }}</span>
+            <code class="eye-edit__provider-url">{{ match ? match.embedUrl : '' }}</code>
+        </div>
+
+        <div class="field">
+            <div class="heading"><label>{{ "Framing"|t('eye') }}</label></div>
+            <div class="input">
+                <div id="eye-framability" class="eye-edit__framability">
+                    {% set framability = embed.framability %}
+                    <span class="status {{ framability.statusColor }}"></span>
+                    <span class="eye-edit__framability-label">{{ framability.statusLabel }}</span>
+                    <span class="eye-edit__framability-message light">{{ framability.message }}</span>
+                </div>
+                <button type="button" class="btn" id="eye-check">{{ "Check now"|t('eye') }}</button>
+                <p class="light">{{ "Asks the URL whether it lets this site frame it. A page that refuses shows nothing at all in a browser, with no error anywhere the reader or the author can see."|t('eye') }}</p>
+            </div>
+        </div>
+
+        <hr>
+
+        {{ forms.selectField({
+            label: "Mode"|t('eye'),
+            instructions: "How the frame gets its height."|t('eye'),
+            id: 'mode',
+            name: 'options[mode]',
+            value: options.mode,
+            options: [
+                { label: "Aspect ratio — responsive, keeps its shape"|t('eye'), value: 'ratio' },
+                { label: "Fixed height"|t('eye'), value: 'fixed' },
+                { label: "Auto height — the frame reports its own size"|t('eye'), value: 'auto' },
+                { label: "Proxy — fetch the page and serve it from this domain"|t('eye'), value: 'proxy' },
+                { label: "Inline — fetch the page and place it in the content, with no frame"|t('eye'), value: 'inline' },
+            ],
+            toggle: true,
+            targetPrefix: 'eye-mode-',
+            errors: embed.getErrors('mode'),
+        }) }}
+
+        <div id="eye-mode-ratio" class="{{ options.mode != 'ratio' ? 'hidden' }}">
+            {{ forms.textField({
+                label: "Aspect ratio"|t('eye'),
+                id: 'ratio',
+                name: 'options[ratio]',
+                value: options.ratio,
+                size: 10,
+                placeholder: '16:9',
+            }) }}
+        </div>
+
+        <div id="eye-mode-fixed" class="{{ options.mode != 'fixed' ? 'hidden' }}">
+            {{ forms.textField({
+                label: "Height"|t('eye'),
+                id: 'height',
+                name: 'options[height]',
+                value: options.height,
+                type: 'number',
+                size: 8,
+                unit: 'px',
+            }) }}
+        </div>
+
+        <div id="eye-mode-auto" class="{{ options.mode != 'auto' ? 'hidden' }}">
+            <div class="readable">
+                <blockquote class="note">
+                    <p>{{ "A browser will not let this page measure a frame from another origin. Auto height works straight away for a URL on this domain; for anything else, the framed page has to include Eye’s child script."|t('eye') }}</p>
+                    <pre><code>&lt;script src="{{ childScriptUrl }}" defer&gt;&lt;/script&gt;</code></pre>
+                </blockquote>
+            </div>
+
+            {{ forms.textField({
+                label: "Measure this element instead"|t('eye'),
+                instructions: "A CSS selector inside the framed page. Same-origin only. Leave blank to measure the whole document."|t('eye'),
+                id: 'autoHeightSelector',
+                name: 'options[autoHeightSelector]',
+                value: options.autoHeightSelector,
+                class: 'code',
+                placeholder: '#main',
+            }) }}
+        </div>
+
+        <div id="eye-mode-proxy" class="{{ options.mode not in ['proxy', 'inline'] ? 'hidden' }}">
+            {% if not proxyUsable %}
+                <div class="readable">
+                    <blockquote class="note warning">
+                        <p>
+                            {% if not settings.proxyEnabled %}
+                                {{ "Eye’s proxy is switched off, so this mode will not save."|t('eye') }}
+                            {% else %}
+                                {{ "Eye’s proxy has no allowed hosts, so it cannot fetch anything."|t('eye') }}
+                            {% endif %}
+                            <a href="{{ url('settings/plugins/eye') }}">{{ "Open Eye’s settings"|t('eye') }}</a>
+                        </p>
+                    </blockquote>
+                </div>
+            {% endif %}
+
+            {{ forms.textField({
+                label: "Keep only"|t('eye'),
+                instructions: "A CSS selector. Everything outside it is dropped, which is how you embed one part of a page instead of the whole thing."|t('eye'),
+                id: 'extract',
+                name: 'options[extract]',
+                value: options.extract,
+                class: 'code',
+                placeholder: '#content, main',
+            }) }}
+
+            {{ forms.textField({
+                label: "Remove"|t('eye'),
+                instructions: "CSS selectors, comma separated. Applied before Keep only."|t('eye'),
+                id: 'remove',
+                name: 'options[remove]',
+                value: options.remove,
+                class: 'code',
+                placeholder: 'nav, .cookie-banner, footer',
+            }) }}
+
+            {{ forms.textareaField({
+                label: "Inject CSS"|t('eye'),
+                instructions: "Added to the fetched page. In inline mode it is scoped to the embed so it cannot repaint the page around it."|t('eye'),
+                id: 'injectCss',
+                name: 'options[injectCss]',
+                value: options.injectCss,
+                class: 'code',
+                rows: 4,
+            }) }}
+
+            {{ forms.selectField({
+                label: "Links inside the page"|t('eye'),
+                id: 'linkTarget',
+                name: 'options[linkTarget]',
+                value: options.linkTarget,
+                options: [
+                    { label: "Open in a new tab"|t('eye'), value: 'blank' },
+                    { label: "Stay inside the frame"|t('eye'), value: 'self' },
+                    { label: "Replace the whole page"|t('eye'), value: 'parent' },
+                ],
+            }) }}
+
+            {{ forms.selectField({
+                label: "Scripts"|t('eye'),
+                id: 'stripScripts',
+                name: 'options[stripScripts]',
+                value: options.stripScripts === null ? '' : (options.stripScripts ? '1' : '0'),
+                options: [
+                    { label: "Use the plugin setting"|t('eye'), value: '' },
+                    { label: "Strip them"|t('eye'), value: '1' },
+                    { label: "Keep them"|t('eye'), value: '0' },
+                ],
+            }) }}
+
+            {{ forms.textField({
+                label: "Cache duration"|t('eye'),
+                instructions: "Seconds. Leave blank to use the plugin setting."|t('eye'),
+                id: 'cacheDuration',
+                name: 'options[cacheDuration]',
+                value: options.cacheDuration,
+                type: 'number',
+                size: 10,
+            }) }}
+        </div>
+
+        <hr>
+
+        {{ forms.selectField({
+            label: "Loading"|t('eye'),
+            instructions: "When the third party is contacted."|t('eye'),
+            id: 'loading',
+            name: 'options[loading]',
+            value: options.loading,
+            options: [
+                { label: "Lazy — when the reader scrolls near it"|t('eye'), value: 'lazy' },
+                { label: "Eager — immediately"|t('eye'), value: 'eager' },
+                { label: "On click — nothing is requested until the reader asks"|t('eye'), value: 'click' },
+            ],
+            toggle: true,
+            targetPrefix: 'eye-loading-',
+        }) }}
+
+        <div id="eye-loading-click" class="{{ options.loading != 'click' ? 'hidden' }}">
+            {{ forms.textField({
+                label: "Consent heading"|t('eye'),
+                id: 'consentTitle',
+                name: 'options[consentTitle]',
+                value: options.consentTitle,
+                placeholder: "Load content from YouTube?"|t('eye'),
+            }) }}
+
+            {{ forms.textareaField({
+                label: "Consent text"|t('eye'),
+                id: 'consentText',
+                name: 'options[consentText]',
+                value: options.consentText,
+                rows: 2,
+            }) }}
+
+            {{ forms.textField({
+                label: "Button label"|t('eye'),
+                id: 'consentButtonLabel',
+                name: 'options[consentButtonLabel]',
+                value: options.consentButtonLabel,
+                placeholder: "Load content"|t('eye'),
+            }) }}
+
+            {{ forms.textField({
+                label: "Poster image URL"|t('eye'),
+                instructions: "Shown behind the consent card. Filled in automatically for providers that expose one."|t('eye'),
+                id: 'posterUrl',
+                name: 'options[posterUrl]',
+                value: options.posterUrl,
+                class: 'code',
+            }) }}
+
+            {{ forms.lightswitchField({
+                label: "Remember the reader’s choice"|t('eye'),
+                instructions: "Stores a per-provider flag in the browser, so a reader who agreed once is not asked again."|t('eye'),
+                id: 'rememberConsent',
+                name: 'options[rememberConsent]',
+                on: options.rememberConsent,
+            }) }}
+        </div>
+
+        <hr>
+
+        {{ forms.textField({
+            label: "Accessible title"|t('eye'),
+            instructions: "Every frame needs a name that describes it to somebody who cannot see it. Eye falls back to the embed’s title."|t('eye'),
+            id: 'frameTitle',
+            name: 'options[title]',
+            value: options.title,
+        }) }}
+
+        {{ forms.textField({
+            label: "Caption"|t('eye'),
+            id: 'caption',
+            name: 'options[caption]',
+            value: options.caption,
+        }) }}
+
+        {{ forms.selectField({
+            label: "Alignment"|t('eye'),
+            id: 'align',
+            name: 'options[align]',
+            value: options.align,
+            options: [
+                { label: "Centre"|t('eye'), value: 'center' },
+                { label: "Left"|t('eye'), value: 'left' },
+                { label: "Right"|t('eye'), value: 'right' },
+                { label: "Wide"|t('eye'), value: 'wide' },
+                { label: "Full bleed"|t('eye'), value: 'full' },
+            ],
+        }) }}
+
+        {{ forms.textField({
+            label: "Width"|t('eye'),
+            instructions: "Any CSS width."|t('eye'),
+            id: 'width',
+            name: 'options[width]',
+            value: options.width,
+            size: 12,
+            class: 'code',
+        }) }}
+
+        {{ forms.textField({
+            label: "Extra classes"|t('eye'),
+            id: 'className',
+            name: 'options[className]',
+            value: options.className,
+            class: 'code',
+        }) }}
+
+        <hr>
+
+        <h2>{{ "Failure and fallback"|t('eye') }}</h2>
+
+        {{ forms.textField({
+            label: "Give up after"|t('eye'),
+            instructions: "Milliseconds to wait for the frame before showing the fallback. 0 waits forever. This catches slow and dead frames — a page blocked by X-Frame-Options gives the browser no signal to catch, which is what the framing check above is for."|t('eye'),
+            id: 'timeout',
+            name: 'options[timeout]',
+            value: options.timeout,
+            type: 'number',
+            size: 8,
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: "Show a loading spinner"|t('eye'),
+            id: 'showLoader',
+            name: 'options[showLoader]',
+            on: options.showLoader,
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: "Offer a link when it fails"|t('eye'),
+            id: 'showFallbackLink',
+            name: 'options[showFallbackLink]',
+            on: options.showFallbackLink,
+        }) }}
+
+        {{ forms.textareaField({
+            label: "Fallback markup"|t('eye'),
+            instructions: "Shown instead of the default card. Leave blank for the default."|t('eye'),
+            id: 'fallback',
+            name: 'options[fallback]',
+            value: options.fallback,
+            class: 'code',
+            rows: 3,
+        }) }}
+
+        <hr>
+
+        <h2>{{ "Security"|t('eye') }}</h2>
+
+        {{ forms.lightswitchField({
+            label: "Sandbox the frame"|t('eye'),
+            instructions: "Restricts what the framed page may do. Leave off to omit the attribute entirely — an empty sandbox is the most restrictive setting there is, and breaks most embeds."|t('eye'),
+            id: 'sandboxEnabled',
+            name: 'options[sandboxEnabled]',
+            on: options.sandbox is not null,
+            toggle: 'eye-sandbox',
+        }) }}
+
+        <div id="eye-sandbox" class="{{ options.sandbox is null ? 'hidden' }}">
+            {{ forms.checkboxGroupField({
+                label: "Allowed inside the sandbox"|t('eye'),
+                id: 'sandbox',
+                name: 'options[sandbox]',
+                values: options.sandbox ?? [],
+                options: sandboxTokens|map(token => { label: token, value: token }),
+            }) }}
+        </div>
+
+        {{ forms.checkboxGroupField({
+            label: "Permissions"|t('eye'),
+            instructions: "Browser features the framed page may use."|t('eye'),
+            id: 'allow',
+            name: 'options[allow]',
+            values: options.allow,
+            options: allowFeatures|map(feature => { label: feature, value: feature }),
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: "Allow fullscreen"|t('eye'),
+            id: 'allowFullscreen',
+            name: 'options[allowFullscreen]',
+            on: options.allowFullscreen,
+        }) }}
+
+        {{ forms.selectField({
+            label: "Referrer policy"|t('eye'),
+            instructions: "How much of this page’s URL is sent to the other site."|t('eye'),
+            id: 'referrerPolicy',
+            name: 'options[referrerPolicy]',
+            value: options.referrerPolicy,
+            options: [
+                'no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-cross-origin',
+                'same-origin', 'strict-origin', 'strict-origin-when-cross-origin', 'unsafe-url',
+            ]|map(policy => { label: policy, value: policy }),
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: "Scroll back to the top"|t('eye'),
+            instructions: "When navigation inside the frame changes its height, bring the top of the frame back into view."|t('eye'),
+            id: 'scrollToTop',
+            name: 'options[scrollToTop]',
+            on: options.scrollToTop,
+        }) }}
+
+        <hr>
+
+        <h2>{{ "Preview"|t('eye') }}</h2>
+        <div class="buttons">
+            <button type="button" class="btn" id="eye-preview-button">{{ "Render this embed"|t('eye') }}</button>
+        </div>
+        <div id="eye-preview" class="eye-edit__preview"></div>
+    </div>
+{% endblock %}
+
+{% block details %}
+    <div id="settings" class="meta">
+        {{ forms.textField({
+            label: "Handle"|t('eye'),
+            instructions: "Used by the reference tag. Generated from the title if you leave it blank."|t('eye'),
+            id: 'handle',
+            name: 'handle',
+            value: embed.handle,
+            class: 'code',
+            errors: embed.getErrors('handle'),
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: "Enabled"|t('app'),
+            instructions: "A disabled embed renders nothing, anywhere it is used."|t('eye'),
+            id: 'enabled',
+            name: 'enabled',
+            on: embed.enabled,
+        }) }}
+    </div>
+
+    {% if embed.id %}
+        <div class="meta read-only">
+            <div class="data">
+                <h5 class="heading">{{ "Reference tag"|t('eye') }}</h5>
+                <div class="value">{{ include('_includes/forms/copytextbtn.twig', {
+                    class: ['code', 'small', 'light'],
+                    value: embed.embedCode,
+                }) }}</div>
+            </div>
+            <div class="data">
+                <h5 class="heading">{{ "Provider"|t('eye') }}</h5>
+                <div class="value">{{ embed.providerName }}</div>
+            </div>
+        </div>
+
+        {{ parent() }}
+    {% endif %}
+{% endblock %}

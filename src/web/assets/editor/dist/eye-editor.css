@@ -1,0 +1,70 @@
+.eye-edit__provider {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin: -0.5rem 0 1.5rem;
+    font-size: 0.8125rem;
+}
+
+.eye-edit__provider-name {
+    font-weight: 600;
+}
+
+.eye-edit__provider-url {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--medium-text-color);
+}
+
+.eye-edit__framability {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+}
+
+.eye-edit__framability-label {
+    font-weight: 600;
+}
+
+.eye-edit__framability-message {
+    font-size: 0.8125rem;
+}
+
+.eye-edit__preview {
+    margin-top: 0.75rem;
+    padding: 1rem;
+    border: 1px dashed var(--hairline-color);
+    border-radius: var(--small-border-radius);
+    background: var(--gray-050);
+}
+
+.eye-edit__preview:empty {
+    display: none;
+}
+
+/* The Embed field ------------------------------------------------------- */
+
+.eye-field__row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.eye-field__provider {
+    font-size: 0.75rem;
+    color: var(--medium-text-color);
+    white-space: nowrap;
+}
+
+.eye-field__options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+}
+
+.eye-field__options .field {
+    margin: 0;
+}

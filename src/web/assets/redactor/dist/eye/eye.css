@@ -1,0 +1,30 @@
+/*
+ * How an embed looks inside Redactor.
+ *
+ * Redactor has no widget system, so the block in the editor is the same block that gets stored:
+ * a div holding the reference tag as text. Rather than leave an author staring at
+ * `{eye:…:render}`, the text is collapsed and the handle is shown on a card — the same card
+ * CKEditor draws, so an embed looks the same in both editors.
+ */
+
+.redactor-in .eye-embed {
+    display: block;
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px dashed #c8ccd2;
+    border-radius: 6px;
+    background: #f9fafb;
+    /* Collapses the reference tag without hiding the element from the editor's block model. */
+    font-size: 0;
+    line-height: 0;
+    color: transparent;
+    user-select: none;
+}
+
+.redactor-in .eye-embed::before {
+    content: "◉ " attr(data-eye-label);
+    display: block;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #3f4d5a;
+}

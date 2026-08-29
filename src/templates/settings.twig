@@ -1,0 +1,202 @@
+{% import "_includes/forms.twig" as forms %}
+
+{#
+    Eye's settings.
+
+    Two halves, and they are not the same kind of decision. The first is presentation and can be
+    changed by anyone who administers the site. The second hands content authors a server-side
+    HTTP client, which is why it is off by default and why the allowed-hosts list has no
+    "everything" value.
+#}
+
+{{ forms.lightswitchField({
+    label: 'Register stylesheet'|t('eye'),
+    instructions: 'Load Eye’s small front-end stylesheet when an embed renders. Turn this off to style embeds entirely from your own CSS.'|t('eye'),
+    id: 'registerCss',
+    name: 'registerCss',
+    on: settings.registerCss,
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Register runtime'|t('eye'),
+    instructions: 'Load Eye’s front-end script when an embed needs it. Without it, click-to-load, auto height and load failure detection stop working — aspect-ratio and fixed-height embeds are unaffected.'|t('eye'),
+    id: 'registerJs',
+    name: 'registerJs',
+    on: settings.registerJs,
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Privacy mode'|t('eye'),
+    instructions: 'Prefer each provider’s cookie-less option where it has one — youtube-nocookie.com, Vimeo’s do-not-track flag, and so on.'|t('eye'),
+    id: 'privacyMode',
+    name: 'privacyMode',
+    on: settings.privacyMode,
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Auto-embed URLs on save'|t('eye'),
+    instructions: 'Turn a bare URL on its own line in a rich-text field into an embed when the entry is saved. The editor buttons already do this at paste time, where an author can see it happen — this is for content arriving from an import, a feed or the Element API.'|t('eye'),
+    id: 'autoembed',
+    name: 'autoembed',
+    on: settings.autoembed,
+}) }}
+
+<hr>
+
+<h2>{{ 'Framing checks'|t('eye') }}</h2>
+
+<p class="light">{{ 'A page that refuses to be framed does not say so — the browser blocks it and leaves a blank rectangle. Eye asks the URL directly, so an author finds out while they are editing rather than after publishing.'|t('eye') }}</p>
+
+{{ forms.lightswitchField({
+    label: 'Check whether URLs allow framing'|t('eye'),
+    instructions: 'Read each URL’s X-Frame-Options and Content-Security-Policy headers when an embed is saved.'|t('eye'),
+    id: 'checkFramability',
+    name: 'checkFramability',
+    on: settings.checkFramability,
+}) }}
+
+{{ forms.textField({
+    label: 'Framability cache duration'|t('eye'),
+    instructions: 'How long a verdict is kept before Eye asks again, in seconds.'|t('eye'),
+    id: 'framabilityCacheDuration',
+    name: 'framabilityCacheDuration',
+    value: settings.framabilityCacheDuration,
+    type: 'number',
+    size: 10,
+    errors: settings.getErrors('framabilityCacheDuration'),
+}) }}
+
+<hr>
+
+<h2>{{ 'Proxy'|t('eye') }}</h2>
+
+<p class="light">
+    {{ 'Proxy and inline modes fetch a page on the server and serve it from your own domain. That answers X-Frame-Options, and it is the only way auto height, content extraction and CSS injection work on a site you do not control.'|t('eye') }}
+</p>
+
+<div class="readable">
+    <blockquote class="note warning">
+        <p>
+            {{ 'Turning this on gives anyone who can create an embed a way to make your server fetch URLs. Eye refuses private and reserved addresses, pins each connection to a validated IP, re-checks every redirect and caps every response — but the allowed-hosts list below is what actually decides where it can go, and it is deliberately the only thing that does.'|t('eye') }}
+        </p>
+    </blockquote>
+</div>
+
+{{ forms.lightswitchField({
+    label: 'Enable the proxy'|t('eye'),
+    id: 'proxyEnabled',
+    name: 'proxyEnabled',
+    on: settings.proxyEnabled,
+    toggle: 'proxy-settings',
+}) }}
+
+<div id="proxy-settings" class="{{ not settings.proxyEnabled ? 'hidden' }}">
+
+    {% if settings.addWarning %}
+        <p class="warning">{{ settings.addWarning }}</p>
+    {% endif %}
+
+    {{ forms.editableTableField({
+        label: 'Allowed hosts'|t('eye'),
+        instructions: 'The only hosts Eye will fetch. Use `example.com` for one host, or `*.example.com` to include its subdomains and the apex. There is no wildcard for everything.'|t('eye'),
+        id: 'allowedHosts',
+        name: 'allowedHosts',
+        cols: {
+            host: {
+                type: 'singleline',
+                heading: 'Host'|t('eye'),
+                placeholder: 'example.com',
+                code: true,
+            },
+        },
+        rows: settings.allowedHostRows,
+        addRowLabel: 'Add a host'|t('eye'),
+        allowAdd: true,
+        allowDelete: true,
+        allowReorder: false,
+        errors: settings.getErrors('allowedHosts'),
+    }) }}
+
+    {{ forms.lightswitchField({
+        label: 'Strip scripts from proxied HTML'|t('eye'),
+        instructions: 'Remove `<script>`, inline event handlers and `javascript:` links from fetched pages. Inline mode splices the result into your own document, where a remote script would run with your origin’s privileges.'|t('eye'),
+        id: 'proxyStripScripts',
+        name: 'proxyStripScripts',
+        on: settings.proxyStripScripts,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Proxy cache duration'|t('eye'),
+        instructions: 'How long a fetched page is reused, in seconds. Individual embeds can override this.'|t('eye'),
+        id: 'proxyCacheDuration',
+        name: 'proxyCacheDuration',
+        value: settings.proxyCacheDuration,
+        type: 'number',
+        size: 10,
+        errors: settings.getErrors('proxyCacheDuration'),
+    }) }}
+
+    {{ forms.textField({
+        label: 'Proxy timeout'|t('eye'),
+        instructions: 'Seconds to wait for a page before giving up.'|t('eye'),
+        id: 'proxyTimeout',
+        name: 'proxyTimeout',
+        value: settings.proxyTimeout,
+        type: 'number',
+        size: 6,
+        errors: settings.getErrors('proxyTimeout'),
+    }) }}
+
+    {{ forms.textField({
+        label: 'Proxy response limit'|t('eye'),
+        instructions: 'The largest page Eye will read, in bytes. Anything bigger is abandoned mid-download.'|t('eye'),
+        id: 'proxyMaxBytes',
+        name: 'proxyMaxBytes',
+        value: settings.proxyMaxBytes,
+        type: 'number',
+        size: 12,
+        errors: settings.getErrors('proxyMaxBytes'),
+    }) }}
+
+    {{ forms.textField({
+        label: 'Proxy redirect limit'|t('eye'),
+        instructions: 'How many redirects to follow. Every hop is re-checked against the allowed hosts and the IP rules.'|t('eye'),
+        id: 'proxyMaxRedirects',
+        name: 'proxyMaxRedirects',
+        value: settings.proxyMaxRedirects,
+        type: 'number',
+        size: 6,
+        errors: settings.getErrors('proxyMaxRedirects'),
+    }) }}
+
+    {{ forms.textField({
+        label: 'Proxy user agent'|t('eye'),
+        instructions: 'How Eye identifies itself when fetching. Never the reader’s user agent.'|t('eye'),
+        id: 'proxyUserAgent',
+        name: 'proxyUserAgent',
+        value: settings.proxyUserAgent,
+        class: 'code',
+        errors: settings.getErrors('proxyUserAgent'),
+    }) }}
+
+    {{ forms.selectField({
+        label: 'HTML Purifier config'|t('eye'),
+        instructions: 'The config used to clean proxied HTML before it is placed inline. Files live in `config/htmlpurifier/`.'|t('eye'),
+        id: 'purifierConfig',
+        name: 'purifierConfig',
+        options: purifierConfigs,
+        value: settings.purifierConfig,
+    }) }}
+</div>
+
+<hr>
+
+<h2>{{ 'Auto height on sites you control'|t('eye') }}</h2>
+
+<p class="light">
+    {{ 'A browser will not let a page measure a frame from another origin. If you own both ends, include Eye’s child script on the framed page and it will report its height — then set the embed’s mode to Auto.'|t('eye') }}
+</p>
+
+<div class="readable">
+    <pre><code>&lt;script src="{{ childScriptUrl }}" defer&gt;&lt;/script&gt;</code></pre>
+</div>

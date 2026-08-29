@@ -1,0 +1,9 @@
+{% extends "_layouts/elementindex.twig" %}
+{% set title = "Embeds"|t('eye') %}
+{% set elementType = 'justinholtweb\\eye\\elements\\Embed' %}
+
+{% block actionButton %}
+    {% if canManage %}
+        <a href="{{ url('eye/embeds/new') }}" class="btn submit add icon">{{ "New embed"|t('eye') }}</a>
+    {% endif %}
+{% endblock %}

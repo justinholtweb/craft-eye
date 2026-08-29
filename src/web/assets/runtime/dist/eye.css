@@ -1,0 +1,260 @@
+/**
+ * Eye — the front-end stylesheet.
+ *
+ * Deliberately small and deliberately unopinionated about colour: an embed lands in the middle of
+ * someone else's design, so this file does layout, and leaves everything visible to CSS custom
+ * properties the site can set.
+ */
+
+.eye {
+    --eye-radius: 4px;
+    --eye-bg: #f4f4f5;
+    --eye-fg: #18181b;
+    --eye-muted: #71717a;
+    --eye-accent: #2563eb;
+    --eye-accent-fg: #ffffff;
+    --eye-border: rgba(0, 0, 0, 0.08);
+
+    display: block;
+    margin: 0 0 1.5rem;
+    max-width: 100%;
+}
+
+.eye-stage {
+    position: relative;
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--eye-radius);
+    background: var(--eye-bg);
+}
+
+/* Every mode but `inline` puts a frame in the stage, and it always fills it. */
+.eye-stage > iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+/* Auto and proxy height is set on the stage in pixels, so the frame follows it. */
+.eye--auto .eye-stage,
+.eye--proxy .eye-stage {
+    transition: height 120ms ease-out;
+}
+
+/* Alignment ------------------------------------------------------------- */
+
+.eye--align-center {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.eye--align-left {
+    margin-right: auto;
+}
+
+.eye--align-right {
+    margin-left: auto;
+}
+
+.eye--align-wide {
+    max-width: min(100vw, 1200px);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.eye--align-full {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+}
+
+.eye--align-full .eye-stage {
+    border-radius: 0;
+}
+
+/* Inline mode is content, not a frame, so it gets no box of its own. */
+.eye--inline .eye-stage {
+    background: none;
+    overflow: visible;
+    height: auto !important;
+}
+
+.eye-inline img,
+.eye-inline video,
+.eye-inline table {
+    max-width: 100%;
+}
+
+/* Loader ---------------------------------------------------------------- */
+
+.eye-loader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.eye-loader span {
+    width: 28px;
+    height: 28px;
+    border: 2px solid var(--eye-border);
+    border-top-color: var(--eye-muted);
+    border-radius: 50%;
+    animation: eye-spin 700ms linear infinite;
+}
+
+@keyframes eye-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .eye-loader span {
+        animation-duration: 2.4s;
+    }
+
+    .eye--auto .eye-stage,
+    .eye--proxy .eye-stage {
+        transition: none;
+    }
+}
+
+.eye--ready .eye-loader {
+    display: none;
+}
+
+/* Consent card ----------------------------------------------------------- */
+
+.eye-consent {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 1.5rem;
+    border: 0;
+    background-color: var(--eye-bg);
+    background-size: cover;
+    background-position: center;
+    color: var(--eye-fg);
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* The scrim only exists when there is a poster to darken. */
+.eye-consent[style*="background-image"] {
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.eye-consent[style*="background-image"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.eye-consent__inner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 32rem;
+}
+
+.eye-consent__title {
+    font-weight: 600;
+    font-size: 1.0625rem;
+    line-height: 1.3;
+}
+
+.eye-consent__text {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    opacity: 0.9;
+}
+
+.eye-consent__button {
+    display: inline-block;
+    margin-top: 0.35rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: calc(var(--eye-radius) + 2px);
+    background: var(--eye-accent);
+    color: var(--eye-accent-fg);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-shadow: none;
+}
+
+.eye-consent:hover .eye-consent__button,
+.eye-consent:focus-visible .eye-consent__button {
+    filter: brightness(1.08);
+}
+
+.eye-consent:focus-visible {
+    outline: 2px solid var(--eye-accent);
+    outline-offset: 2px;
+}
+
+/* Fallback --------------------------------------------------------------- */
+
+.eye-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 1.5rem;
+    background: var(--eye-bg);
+    color: var(--eye-fg);
+    text-align: center;
+}
+
+.eye--inline .eye-fallback {
+    position: static;
+    border: 1px solid var(--eye-border);
+    border-radius: var(--eye-radius);
+}
+
+.eye-fallback[hidden] {
+    display: none;
+}
+
+.eye-fallback__title {
+    margin: 0;
+    font-weight: 600;
+}
+
+.eye-fallback__reason {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--eye-muted);
+}
+
+.eye-fallback__link {
+    margin-top: 0.35rem;
+    color: var(--eye-accent);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+/* Caption ---------------------------------------------------------------- */
+
+.eye-caption {
+    margin: 0.5rem 0 0;
+    color: var(--eye-muted);
+    font-size: 0.875rem;
+    line-height: 1.45;
+}

@@ -1,0 +1,128 @@
+{% import "_includes/forms.twig" as forms %}
+
+{#
+    The Embed field.
+
+    Only the options the field was configured to expose appear here — an author filling in a
+    video field should see a URL box, not the sandbox editor. Everything not shown falls back to
+    the field's defaults, then to the plugin's.
+#}
+
+<div class="eye-field" data-eye-field id="{{ id }}">
+    <div class="eye-field__row">
+        <input type="url"
+               class="text fullwidth code"
+               name="{{ name }}[url]"
+               value="{{ value.url }}"
+               placeholder="https://…"
+               data-eye-field-url
+               aria-label="{{ 'URL'|t('eye') }}">
+        <span class="eye-field__provider" data-eye-field-provider>{{ match and not match.provider.isGeneric ? match.provider.name : '' }}</span>
+    </div>
+
+    {% if enabledOptions|length %}
+        <div class="eye-field__options">
+
+            {% if 'mode' in enabledOptions %}
+                {{ forms.selectField({
+                    label: 'Mode'|t('eye'),
+                    name: name ~ '[options][mode]',
+                    value: options.mode,
+                    options: [
+                        { label: 'Aspect ratio'|t('eye'), value: 'ratio' },
+                        { label: 'Fixed height'|t('eye'), value: 'fixed' },
+                        { label: 'Auto height'|t('eye'), value: 'auto' },
+                    ]|merge(proxyUsable ? [
+                        { label: 'Proxy'|t('eye'), value: 'proxy' },
+                        { label: 'Inline'|t('eye'), value: 'inline' },
+                    ] : []),
+                }) }}
+            {% endif %}
+
+            {% if 'ratio' in enabledOptions %}
+                {{ forms.textField({
+                    label: 'Ratio'|t('eye'),
+                    name: name ~ '[options][ratio]',
+                    value: options.ratio,
+                    size: 7,
+                    placeholder: '16:9',
+                }) }}
+            {% endif %}
+
+            {% if 'height' in enabledOptions %}
+                {{ forms.textField({
+                    label: 'Height'|t('eye'),
+                    name: name ~ '[options][height]',
+                    value: options.height,
+                    type: 'number',
+                    size: 7,
+                }) }}
+            {% endif %}
+
+            {% if 'loading' in enabledOptions %}
+                {{ forms.selectField({
+                    label: 'Loading'|t('eye'),
+                    name: name ~ '[options][loading]',
+                    value: options.loading,
+                    options: [
+                        { label: 'Lazy'|t('eye'), value: 'lazy' },
+                        { label: 'Eager'|t('eye'), value: 'eager' },
+                        { label: 'On click'|t('eye'), value: 'click' },
+                    ],
+                }) }}
+            {% endif %}
+
+            {% if 'align' in enabledOptions %}
+                {{ forms.selectField({
+                    label: 'Alignment'|t('eye'),
+                    name: name ~ '[options][align]',
+                    value: options.align,
+                    options: [
+                        { label: 'Centre'|t('eye'), value: 'center' },
+                        { label: 'Left'|t('eye'), value: 'left' },
+                        { label: 'Right'|t('eye'), value: 'right' },
+                        { label: 'Wide'|t('eye'), value: 'wide' },
+                        { label: 'Full bleed'|t('eye'), value: 'full' },
+                    ],
+                }) }}
+            {% endif %}
+        </div>
+
+        {% if 'title' in enabledOptions %}
+            {{ forms.textField({
+                label: 'Accessible title'|t('eye'),
+                instructions: 'Describes the frame to somebody who cannot see it.'|t('eye'),
+                name: name ~ '[options][title]',
+                value: options.title,
+            }) }}
+        {% endif %}
+
+        {% if 'caption' in enabledOptions %}
+            {{ forms.textField({
+                label: 'Caption'|t('eye'),
+                name: name ~ '[options][caption]',
+                value: options.caption,
+            }) }}
+        {% endif %}
+
+        {% if 'consent' in enabledOptions %}
+            {{ forms.textareaField({
+                label: 'Consent text'|t('eye'),
+                instructions: 'Shown on the click-to-load card.'|t('eye'),
+                name: name ~ '[options][consentText]',
+                value: options.consentText,
+                rows: 2,
+            }) }}
+        {% endif %}
+
+        {% if 'extract' in enabledOptions and proxyUsable %}
+            {{ forms.textField({
+                label: 'Keep only'|t('eye'),
+                instructions: 'A CSS selector, for proxy and inline modes.'|t('eye'),
+                name: name ~ '[options][extract]',
+                value: options.extract,
+                class: 'code',
+            }) }}
+        {% endif %}
+    {% endif %}
+</div>

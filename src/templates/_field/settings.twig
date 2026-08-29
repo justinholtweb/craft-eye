@@ -1,0 +1,46 @@
+{% import "_includes/forms.twig" as forms %}
+
+{{ forms.checkboxSelectField({
+    label: 'Options authors can set'|t('eye'),
+    instructions: 'Anything not shown here uses the defaults below, then the plugin’s. Keep this short — an author filling in a video field wants a URL box, not a sandbox editor.'|t('eye'),
+    id: 'enabledOptions',
+    name: 'enabledOptions',
+    values: field.enabledOptions,
+    options: optionChoices,
+    showAllOption: false,
+}) }}
+
+{{ forms.selectField({
+    label: 'Default mode'|t('eye'),
+    id: 'defaultMode',
+    name: 'defaultOptions[mode]',
+    value: field.defaultOptions.mode ?? 'ratio',
+    options: [
+        { label: 'Aspect ratio'|t('eye'), value: 'ratio' },
+        { label: 'Fixed height'|t('eye'), value: 'fixed' },
+        { label: 'Auto height'|t('eye'), value: 'auto' },
+        { label: 'Proxy'|t('eye'), value: 'proxy' },
+        { label: 'Inline'|t('eye'), value: 'inline' },
+    ],
+}) }}
+
+{{ forms.selectField({
+    label: 'Default loading'|t('eye'),
+    id: 'defaultLoading',
+    name: 'defaultOptions[loading]',
+    value: field.defaultOptions.loading ?? 'lazy',
+    options: [
+        { label: 'Lazy'|t('eye'), value: 'lazy' },
+        { label: 'Eager'|t('eye'), value: 'eager' },
+        { label: 'On click'|t('eye'), value: 'click' },
+    ],
+}) }}
+
+{{ forms.textField({
+    label: 'Default aspect ratio'|t('eye'),
+    id: 'defaultRatio',
+    name: 'defaultOptions[ratio]',
+    value: field.defaultOptions.ratio ?? '16:9',
+    size: 8,
+    placeholder: '16:9',
+}) }}

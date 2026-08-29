@@ -1,0 +1,83 @@
+{# ---------------------------------------------------------------------------
+   Eye — the embed template.
+
+   Overridable: put your own at `_eye/embed.twig` in the site's templates and it
+   wins, with these same variables.
+
+   The shape is deliberate. A `<figure>` because an embed with a caption is a
+   figure; a separate `.eye-stage` because that is what carries the aspect ratio
+   and what the runtime resizes; and, for click-to-load, the iframe parked in a
+   `<template>` so that nothing at all is requested until the reader asks — a
+   `hidden` iframe still loads, which is the mistake most consent banners make.
+--------------------------------------------------------------------------- #}
+
+{%- macro frame(src, attributes) -%}
+    <iframe src="{{ src }}" data-eye-frame{{ attr(attributes) }}></iframe>
+{%- endmacro -%}
+
+{% import _self as eye %}
+
+<figure id="{{ id }}" class="{{ classes|join(' ') }}" data-eye="{{ config }}">
+    <div class="eye-stage"{% if wrapperStyle %} style="{{ wrapperStyle }}"{% endif %}>
+
+        {%- if options.mode == 'inline' -%}
+            {%- if inlineHtml is not null -%}
+                {{ inlineHtml|raw }}
+            {%- else -%}
+                <div class="eye-fallback" data-eye-fallback>
+                    {% if fallback.html %}
+                        {{ fallback.html|raw }}
+                    {% else %}
+                        <p class="eye-fallback__title">{{ fallback.title }}</p>
+                        {% if inlineError %}<p class="eye-fallback__reason">{{ inlineError }}</p>{% endif %}
+                        {% if fallback.showLink %}
+                            <a class="eye-fallback__link" href="{{ fallback.url }}" target="_blank" rel="noopener noreferrer">{{ fallback.linkLabel }}</a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {%- endif -%}
+
+        {%- elseif options.loading == 'click' -%}
+            <button type="button" class="eye-consent" data-eye-consent
+                {%- if consent.poster %} style="background-image:url({{ consent.poster }})"{% endif %}>
+                <span class="eye-consent__inner">
+                    <span class="eye-consent__title">{{ consent.title }}</span>
+                    {% if consent.text %}<span class="eye-consent__text">{{ consent.text }}</span>{% endif %}
+                    <span class="eye-consent__button">{{ consent.button }}</span>
+                </span>
+            </button>
+
+            {# Inert until cloned. A `hidden` iframe would already have made the request. #}
+            <template data-eye-template>{{ eye.frame(src, frameAttributes) }}</template>
+
+            <noscript>
+                <a class="eye-consent__noscript" href="{{ fallback.url }}" target="_blank" rel="noopener noreferrer">{{ fallback.linkLabel }}</a>
+            </noscript>
+
+        {%- else -%}
+            {{ eye.frame(src, frameAttributes) }}
+        {%- endif -%}
+
+        {%- if options.mode != 'inline' -%}
+            {% if options.showLoader and options.loading != 'click' %}
+                <div class="eye-loader" data-eye-loader aria-hidden="true"><span></span></div>
+            {% endif %}
+
+            <div class="eye-fallback" data-eye-fallback hidden>
+                {% if fallback.html %}
+                    {{ fallback.html|raw }}
+                {% else %}
+                    <p class="eye-fallback__title">{{ fallback.title }}</p>
+                    <p class="eye-fallback__reason">{{ fallback.text }}</p>
+                    {% if fallback.showLink %}
+                        <a class="eye-fallback__link" href="{{ fallback.url }}" target="_blank" rel="noopener noreferrer">{{ fallback.linkLabel }}</a>
+                    {% endif %}
+                {% endif %}
+            </div>
+        {%- endif -%}
+    </div>
+
+    {%- if options.caption -%}
+        <figcaption class="eye-caption">{{ options.caption }}</figcaption>
+    {%- endif -%}
+</figure>
