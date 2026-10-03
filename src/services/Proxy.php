@@ -40,7 +40,7 @@ use yii\base\Exception;
 class Proxy extends Component
 {
     /** Bump when the transformation changes, so old cache entries are not reused. */
-    private const CACHE_VERSION = 1;
+    private const CACHE_VERSION = 2;
 
     private const CACHE_PREFIX = 'eye:proxy:';
 
@@ -64,6 +64,12 @@ class Proxy extends Component
     public function fragment(string $url, EmbedOptions $options): ProxyResult
     {
         return $this->render($url, $options, true);
+    }
+
+    /** Whether this embed's proxied page has its scripts removed. */
+    public function stripsScripts(EmbedOptions $options): bool
+    {
+        return $options->stripScripts ?? Plugin::getInstance()->getSettings()->proxyStripScripts;
     }
 
     public function forget(string $url, EmbedOptions $options): void
@@ -131,11 +137,15 @@ class Proxy extends Component
         $base = $this->resolveBase($xpath, $url);
         $this->removeNodes($xpath, '//base');
 
-        $strip = $options->stripScripts ?? $settings->proxyStripScripts;
+        $strip = $this->stripsScripts($options);
 
         if ($strip) {
+            // The response's CSP sandbox is what actually stops script here (see
+            // ProxyController); this is the second layer, so a stripped page has nothing left
+            // that would run if that header were ever lost on the way to the browser.
             $this->removeNodes($xpath, '//script');
             $this->removeNodes($xpath, '//noscript');
+            $this->unwrapNodes($xpath, '//object|//embed|//applet');
             $this->stripEventHandlers($xpath);
         }
 
@@ -461,6 +471,31 @@ class Proxy extends Component
         return $found ? array_values($found) : null;
     }
 
+    /**
+     * Remove elements but keep what is inside them.
+     *
+     * For `<object>` that is the fallback content HTML shows when there is no plugin. For
+     * `<embed>` it matters more than it looks: libxml's HTML 4 parser does not know `<embed>` is a
+     * void element, so it nests the *rest of the page* inside it, and removing the node would take
+     * all of that with it.
+     */
+    private function unwrapNodes(DOMXPath $xpath, string $expression): void
+    {
+        foreach (array_reverse(iterator_to_array($xpath->query($expression) ?: [])) as $node) {
+            $parent = $node->parentNode;
+
+            if ($parent === null) {
+                continue;
+            }
+
+            while ($node->firstChild) {
+                $parent->insertBefore($node->firstChild, $node);
+            }
+
+            $parent->removeChild($node);
+        }
+    }
+
     private function removeNodes(DOMXPath $xpath, string $expression): void
     {
         foreach (iterator_to_array($xpath->query($expression) ?: []) as $node) {
@@ -468,25 +503,47 @@ class Proxy extends Component
         }
     }
 
-    /** `onclick` and friends survive script removal otherwise, and they are scripts. */
+    /**
+     * Everything that runs script without a `<script>` element: `onclick` and friends, `srcdoc`
+     * (a whole document in an attribute), and `javascript:` / `vbscript:` / `data:` URLs in any
+     * attribute a browser will follow — `<iframe src>`, `<form action>`, `<a href>`, SVG's
+     * `xlink:href`. A `data:` image is left alone; it cannot run anything.
+     */
     private function stripEventHandlers(DOMXPath $xpath): void
     {
-        foreach ($xpath->query('//@*') ?: [] as $attribute) {
-            if (preg_match('/^on\w+/i', $attribute->nodeName)) {
-                $attribute->parentNode?->removeAttribute($attribute->nodeName);
-            }
-        }
+        foreach (iterator_to_array($xpath->query('//@*') ?: []) as $attribute) {
+            $name = strtolower($attribute->nodeName);
+            $element = $attribute->parentNode;
 
-        foreach ($xpath->query('//*[@href]') ?: [] as $node) {
-            if ($node instanceof DOMElement && preg_match('/^\s*javascript:/i', $node->getAttribute('href'))) {
-                $node->removeAttribute('href');
+            if (!$element instanceof DOMElement) {
+                continue;
             }
+
+            if (preg_match('/^on\w+/', $name) || $name === 'srcdoc') {
+                $element->removeAttribute($attribute->nodeName);
+
+                continue;
+            }
+
+            $value = preg_replace('/[\x00-\x20]+/', '', html_entity_decode((string)$attribute->nodeValue)) ?? '';
+
+            if (!preg_match('/^(javascript|vbscript|data):/i', $value)) {
+                continue;
+            }
+
+            if (strtolower($element->nodeName) === 'img' && in_array($name, ['src', 'srcset'], true) && preg_match('/^data:image\//i', $value)) {
+                continue;
+            }
+
+            $element->removeAttribute($attribute->nodeName);
         }
     }
 
     private function textOf(DOMXPath $xpath, string $expression): string
     {
-        $node = $xpath->query($expression)?->item(0);
+        // `query()` returns false for a bad expression, and `?->` does not catch false.
+        $nodes = $xpath->query($expression);
+        $node = $nodes !== false ? $nodes->item(0) : null;
 
         return $node ? trim(preg_replace('/\s+/', ' ', $node->textContent) ?? '') : '';
     }
@@ -509,6 +566,14 @@ class Proxy extends Component
             $style = $dom->createElement('style');
             $style->appendChild($dom->createTextNode($this->frameCss($options)));
             $head->appendChild($style);
+
+            // A page that keeps its scripts is served sandboxed onto an opaque origin, so the
+            // parent cannot measure it; the child script reports its height instead.
+            if (!$this->stripsScripts($options) && ($child = $this->childScript()) !== null) {
+                $script = $dom->createElement('script');
+                $script->appendChild($dom->createTextNode($child));
+                $head->appendChild($script);
+            }
         }
 
         $html = $dom->saveHTML();
@@ -537,8 +602,8 @@ class Proxy extends Component
 
         if ($options->injectCss !== '') {
             // Scoped by prefixing the wrapper's class, so an author's `body { … }` cannot repaint
-            // the page around it.
-            $css = '<style>' . $this->scopeCss($options->injectCss, ".$scope") . '</style>';
+            // the page around it. Cleaned again here because this lands in the site's own page.
+            $css = '<style>' . $this->scopeCss(EmbedOptions::cleanCss($this->flattenCss($options->injectCss)), ".$scope") . '</style>';
         }
 
         return sprintf('<div class="eye-inline %s">%s%s</div>', $scope, $css, $html);
@@ -549,10 +614,58 @@ class Proxy extends Component
         $css = "html,body{margin:0;padding:0;}img,video,iframe,table{max-width:100%;}";
 
         if ($options->injectCss !== '') {
-            $css .= "\n" . $options->injectCss;
+            $css .= "\n" . EmbedOptions::cleanCss($options->injectCss);
         }
 
         return $css;
+    }
+
+    private function childScript(): ?string
+    {
+        $path = Craft::getAlias('@justinholtweb/eye/web/assets/runtime/dist/eye-child.js');
+        $js = $path && is_file($path) ? file_get_contents($path) : false;
+
+        // `</script` cannot appear in it today; make sure it never ends the element early.
+        return is_string($js) ? str_ireplace('</script', '<\/script', $js) : null;
+    }
+
+    /**
+     * Inline CSS lands in the site's own page, so it gets no at-rules and no escapes at all.
+     *
+     * The scoper only prefixes top-level selectors: one nested in `@media` or `@supports` would
+     * reach the whole page, where an attribute selector and a background URL can read a CSRF
+     * token out one character at a time. And an escape can spell an at-keyword (`@\69mport`)
+     * that no pattern for `@import` will ever match. Rules that need either belong in a
+     * stylesheet on the site.
+     */
+    private function flattenCss(string $css): string
+    {
+        $css = str_replace('\\', '', $css);
+
+        // A block at-rule takes its block with it, nested braces included; a statement one ends
+        // at its semicolon.
+        do {
+            $css = preg_replace('/@[^{};]*\{(?:[^{}]|\{[^{}]*\})*\}|@[^{};]*;?/', '', $css, -1, $count) ?? '';
+        } while ($count > 0 && str_contains($css, '@'));
+
+        $css = str_replace('@', '', $css);
+
+        // Whatever is left must be flat rule sets. Anything still nested — braces the pattern
+        // above could not pair up — would put a selector out of the scoper's reach, so the whole
+        // block is refused rather than half-trusted.
+        $depth = 0;
+
+        foreach (str_split($css) as $char) {
+            $depth += match ($char) {
+                '{' => 1, '}' => -1, default => 0
+            };
+
+            if ($depth < 0 || $depth > 1) {
+                return '';
+            }
+        }
+
+        return $depth === 0 ? $css : '';
     }
 
     /**
@@ -587,9 +700,10 @@ class Proxy extends Component
 
     /**
      * Inline mode splices remote HTML into this site's own document, where a remote script would
-     * run with this origin's privileges. Purifier is not optional here.
+     * run with this origin's privileges. Purifier is not optional here — nor for an embed's
+     * fallback markup, which the renderer prints raw.
      */
-    private function purify(string $html): string
+    public function purify(string $html): string
     {
         $config = HTMLPurifier_Config::createDefault();
         $config->autoFinalize = false;
@@ -646,7 +760,8 @@ class Proxy extends Component
             $options->extract,
             $options->remove,
             $options->injectCss,
-            var_export($options->stripScripts, true),
+            // The effective answer, not the option: the plugin setting can change under it.
+            $this->stripsScripts($options) ? 'strip' : 'keep',
             $options->linkTarget,
         ]));
     }

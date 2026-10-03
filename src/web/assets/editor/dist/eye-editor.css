@@ -68,3 +68,18 @@
 .eye-field__options .field {
     margin: 0;
 }
+
+/* A reference tag is too long for the details pane's value column, and wrapping it mid-tag makes
+   it look like two things. Give it the pane's full width on its own line. */
+.eye-edit__ref-tag {
+    flex-wrap: wrap;
+}
+
+.eye-edit__ref-tag .value {
+    flex-basis: 100%;
+    margin-top: 4px;
+}
+
+.eye-edit__ref-tag .copytextbtn {
+    white-space: nowrap;
+}

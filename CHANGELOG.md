@@ -7,6 +7,46 @@ All notable changes to Eye are documented here.
 Initial release. Versioned 5.x to match the Craft major it targets, as the rest of this plugin
 family is.
 
+### Security
+
+Hardened before release, after a security review:
+
+- Fallback markup is purified whoever wrote it, and only `http(s)` URLs render — from the library,
+  an Embed field or `craft.eye.url()`.
+- Reference tags may only change presentational options, and cannot switch a framed embed to proxy
+  or inline. The Embed field only accepts the options it is configured to show.
+- Widths, poster URLs, root margins, class names and ids are checked before they reach a `style`
+  attribute or CSS `url()`; injected CSS cannot close its `<style>` or `@import` a stylesheet.
+- Proxied pages are served in a CSP sandbox: with scripts stripped they keep the site's origin but
+  may run nothing; with scripts kept they run on an opaque origin and report their height through
+  the injected child script. Stripping also removes `srcdoc`, plugin elements and
+  `javascript:`/`vbscript:`/`data:` URLs from every attribute.
+- The public proxy route is rate limited per address and caches for at least 60 seconds outside
+  `devMode`; stored embeds' proxy URLs are versioned so a changed embed is not served stale.
+- Outbound fetches always go through curl, so the connection is pinned to the address that was
+  validated. Guzzle's default stack could hand a request to PHP's stream wrapper, which ignores the
+  pin and resolves the host again. A configured outbound proxy is never used, and the size cap is
+  enforced as the bytes arrive.
+- The rate limit charges the connecting address unless the site has configured `trustedHosts`, so
+  a forged `X-Forwarded-For` no longer buys a fresh budget. IPv6 addresses are charged per /64, and
+  there is a site-wide cap as well.
+- Framing checks and previews are rate limited for users without the manage permission, and
+  previewing a proxy or inline embed needs that permission.
+- A JSON string posted to an Embed field is read as a URL, so it can't carry options the field
+  doesn't allow.
+- CSS injected into an inline embed may not contain at-rules or escapes, so no selector escapes
+  its scope. An at-rule whose name contains an escape is removed everywhere.
+- Signed proxy payloads use a key derived for Eye alone, so nothing else Craft signs is accepted.
+
+### Fixed
+
+- Opening an existing embed for editing no longer fails with a Twig error.
+- CodePen team pens (`codepen.io/team/…/pen/…`) are recognised as CodePen.
+- A page sending the non-standard `X-Frame-Options: ALLOWALL` (Calendly does) is reported as
+  embeddable rather than "not understood".
+- The Embed field's URL lookup, framing check and preview now work for authors with no access to
+  the embed library.
+
 ### Added
 
 - **Embed element** with reference-tag rendering (`{eye:handle:render}`), so an embed renders in

@@ -449,7 +449,7 @@
 
     {% if embed.id %}
         <div class="meta read-only">
-            <div class="data">
+            <div class="data eye-edit__ref-tag">
                 <h5 class="heading">{{ "Reference tag"|t('eye') }}</h5>
                 <div class="value">{{ include('_includes/forms/copytextbtn.twig', {
                     class: ['code', 'small', 'light'],
@@ -460,8 +460,14 @@
                 <h5 class="heading">{{ "Provider"|t('eye') }}</h5>
                 <div class="value">{{ embed.providerName }}</div>
             </div>
+            <div class="data">
+                <h5 class="heading">{{ "Created at"|t('app') }}</h5>
+                <div class="value">{{ embed.dateCreated|datetime('short') }}</div>
+            </div>
+            <div class="data">
+                <h5 class="heading">{{ "Updated at"|t('app') }}</h5>
+                <div class="value">{{ embed.dateUpdated|datetime('short') }}</div>
+            </div>
         </div>
-
-        {{ parent() }}
     {% endif %}
 {% endblock %}

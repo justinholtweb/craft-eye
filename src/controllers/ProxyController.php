@@ -4,6 +4,7 @@ namespace justinholtweb\eye\controllers;
 
 use Craft;
 use craft\web\Controller;
+use justinholtweb\eye\helpers\RateLimit;
 use justinholtweb\eye\models\EmbedOptions;
 use justinholtweb\eye\Plugin;
 use justinholtweb\eye\services\ProxyRoutes;
@@ -12,6 +13,7 @@ use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
+use yii\web\TooManyRequestsHttpException;
 
 /**
  * The public face of proxy mode.
@@ -28,6 +30,27 @@ class ProxyController extends Controller
 
     public $enableCsrfValidation = false;
 
+    /** Requests per minute one address may make to the proxy. A page rarely has more than a few. */
+    public const REQUESTS_PER_MINUTE = 120;
+
+    /**
+     * The shortest a proxied page is cached for outside devMode. With no cache at all, every
+     * page view is a fetch from the remote site, so anyone with a frame URL could use this server
+     * to hammer it.
+     */
+    public const MIN_CACHE_SECONDS = 60;
+
+    /**
+     * The sandbox a proxied page is served in, as a CSP directive.
+     *
+     * With its scripts stripped, the page keeps this site's origin — that is what lets the parent
+     * measure it — but may run nothing: no scripts, no `javascript:` frames, no `srcdoc`. With its
+     * scripts kept, it may run them but loses this origin, so they cannot read the site's cookies
+     * or call its actions as whoever is viewing.
+     */
+    private const SANDBOX_STRIPPED = 'sandbox allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation';
+    private const SANDBOX_SCRIPTED = 'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation';
+
     /**
      * Serve a proxied page for a frame to point at.
      *
@@ -35,6 +58,13 @@ class ProxyController extends Controller
      */
     public function actionRender(?string $uid = null): Response
     {
+        // First, before anything touches the database: this route is anonymous.
+        if (!RateLimit::allow('proxy', self::REQUESTS_PER_MINUTE)) {
+            Craft::$app->getResponse()->getHeaders()->set('Retry-After', '60');
+
+            throw new TooManyRequestsHttpException(Craft::t('eye', 'Too many requests. Try again in a minute.'));
+        }
+
         $plugin = Plugin::getInstance();
         $settings = $plugin->getSettings();
 
@@ -43,6 +73,12 @@ class ProxyController extends Controller
         }
 
         [$url, $options] = $this->resolveTarget($uid);
+
+        $duration = $options->cacheDuration ?? $settings->proxyCacheDuration;
+
+        if ($duration < self::MIN_CACHE_SECONDS && !Craft::$app->getConfig()->getGeneral()->devMode) {
+            $options->cacheDuration = self::MIN_CACHE_SECONDS;
+        }
 
         try {
             $result = $plugin->proxy->document($url, $options);
@@ -66,7 +102,7 @@ class ProxyController extends Controller
     {
         $path = Craft::getAlias('@justinholtweb/eye/web/assets/runtime/dist/eye-child.js');
 
-        if (!is_string($path) || !is_file($path)) {
+        if (!$path || !is_file($path)) {
             throw new NotFoundHttpException();
         }
 
@@ -136,7 +172,12 @@ class ProxyController extends Controller
             // Only this site may frame the proxy. Without it, anyone who found the URL could
             // frame it on their own site and use this server as their content delivery.
             ->set('X-Frame-Options', 'SAMEORIGIN')
-            ->set('Content-Security-Policy', "frame-ancestors 'self'")
+            ->set('Content-Security-Policy', implode('; ', array_filter([
+                Plugin::getInstance()->proxy->stripsScripts($options) ? self::SANDBOX_STRIPPED : self::SANDBOX_SCRIPTED,
+                Plugin::getInstance()->proxy->stripsScripts($options) ? "script-src 'none'" : null,
+                "object-src 'none'",
+                "frame-ancestors 'self'",
+            ])))
             ->set('Cache-Control', $duration > 0 ? "private, max-age=$duration" : 'no-store');
 
         return $response;
@@ -164,7 +205,8 @@ class ProxyController extends Controller
         $response->getHeaders()
             ->set('Content-Type', 'text/html; charset=utf-8')
             ->set('Cache-Control', 'no-store')
-            ->set('X-Frame-Options', 'SAMEORIGIN');
+            ->set('X-Frame-Options', 'SAMEORIGIN')
+            ->set('Content-Security-Policy', self::SANDBOX_STRIPPED . "; script-src 'none'; frame-ancestors 'self'");
 
         return $response;
     }

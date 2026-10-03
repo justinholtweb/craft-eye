@@ -1,4 +1,5 @@
 <?php
+
 // Live network probe — not part of the check suite (it needs the internet).
 $root = getcwd();
 require $root . '/bootstrap.php';

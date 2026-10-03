@@ -53,7 +53,8 @@ ratio, the `allow` tokens, and the cookie-less host where there is one:
 > CodeSandbox · Descript · PDF
 
 Anything it doesn't recognise is framed as-is. Pasting a URL on its own line in CKEditor turns it
-into an embed; so does the picker; so does `craft.eye.url()`.
+into a library embed, and so does the picker. `craft.eye.url()` renders a URL with the same
+provider rules but doesn't create a library entry.
 
 A useful side effect: because a pasted URL becomes a library element, **every third-party frame on
 your site ends up in one index**, where you can audit it, switch it off, or move it behind a
@@ -70,7 +71,7 @@ An embed's mode decides how the frame gets its height, which is the whole proble
 | **Aspect ratio** | Responsive box that keeps its shape. The default. | CSS `aspect-ratio` |
 | **Fixed** | One explicit height. | you |
 | **Auto** | The frame reports its own height. | same-origin DOM read, or a `postMessage` handshake |
-| **Proxy** | Eye fetches the page server-side and serves it from **your** domain. | same-origin DOM read — always works |
+| **Proxy** | Eye fetches the page server-side and serves it from **your** domain. | same-origin DOM read, or the child script Eye injects when the page keeps its scripts |
 | **Inline** | Eye fetches the page and puts the content straight in your page. No iframe at all. | it's just content |
 
 ### Auto height across origins
@@ -99,6 +100,23 @@ navigation, cookie banner or footer.
 
 **It's off by default, and it needs an explicit host allowlist.** See [Security](#security).
 
+A proxied page is served in a sandbox, set by its `Content-Security-Policy` header:
+
+- **Scripts stripped** (the default): the page keeps your origin, so the parent measures it
+  directly, but nothing in it may run — not its own scripts, not a `javascript:` link, not a
+  `srcdoc` frame.
+- **Scripts kept**: the page may run its scripts, but on an opaque origin, so they cannot read your
+  cookies or act as whoever is viewing. Eye injects its child script, and the height arrives by
+  `postMessage`. Anything on the page that needs cookies, storage or a service worker won't work
+  in this mode; **Measure this element instead** is ignored, because the parent can no longer see inside.
+
+Other plugins that add scripts to every HTML response (analytics, PWA and so on) add them to
+proxied pages too. With scripts stripped the browser blocks them, and logs a "Blocked script
+execution … the document's frame is sandboxed" line for each; that line is the sandbox working.
+
+Proxied pages are cached for at least 60 seconds outside `devMode`, and each address may request
+120 a minute.
+
 ---
 
 ## Loading and consent
@@ -110,8 +128,8 @@ navigation, cookie banner or footer.
 
 The click-to-load card is the honest kind: the iframe lives inside a `<template>` element, so it
 genuinely has not been requested. (A `hidden` iframe still loads — that's the mistake most consent
-banners make.) There's a `<noscript>` link too, and the reader's choice can be remembered per
-provider.
+banners make.) There's a `<noscript>` link too, and the reader's choice can be remembered for
+each host the embed loads from.
 
 ```js
 Eye.forgetConsent(); // for a "privacy settings" link
@@ -175,6 +193,21 @@ is not an IPv4 address.
 Inline mode splices remote HTML into your own document, so it always goes through HTML Purifier,
 scripts are stripped by default, and injected CSS is scoped to the embed.
 
+### What authors can and can't change
+
+- **Fallback markup is always purified.** It's printed raw, so it goes through HTML Purifier
+  whoever wrote it.
+- **Only `http` and `https` URLs render**, from the library, an Embed field or `craft.eye.url()`.
+  Anything else renders nothing.
+- **Reference tags only change presentation.** Anyone who can write rich text can write one, so a
+  tag may set the mode, size, alignment, loading, caption, title and consent text — never fallback
+  markup, CSS, the sandbox, `allow` tokens, frame parameters or proxy rules — and it cannot switch
+  a framed embed to proxy or inline.
+- **The Embed field takes only the options you enabled for it.** The rest keep their defaults,
+  even if somebody posts them.
+- **Values that end up in CSS are checked**: a width must be a CSS length, a poster must be an
+  `http(s)` URL, and injected CSS cannot close its `<style>` element or `@import` anything.
+
 Proxied pages are served with `X-Frame-Options: SAMEORIGIN` and `frame-ancestors 'self'`, so
 nobody else can point a frame at your proxy.
 
@@ -214,6 +247,8 @@ Reference tags can carry per-embed options:
 {eye:map:render(full,no-showLoader)}
 ```
 
+Only presentational ones — see [What authors can and can't change](#what-authors-can-and-cant-change).
+
 ### Overriding the markup
 
 Put your own template at `_eye/embed.twig` and it wins, with the same variables Eye's own template
@@ -229,7 +264,8 @@ and the colours are custom properties:
 ## Fields
 
 - **Embed** — paste a URL and configure it on the entry. You choose which options authors see, so
-  a video field can be a URL box and nothing else.
+  a video field can be a URL box and nothing else; options you didn't enable can't be posted
+  either. Authors need no access to the embed library to use it.
 - **Embeds** — an ordinary relation field pointing at the library, with eager loading and
   everything else relation fields do.
 
@@ -266,11 +302,13 @@ screen.
 
 ## Testing
 
-Integration checks live in `tests/integration/checks.php` — 114 checks, idempotent and
-self-cleaning. Run from the site root:
+Integration checks live in `tests/integration/checks.php` (140 checks) and
+`tests/integration/trust.php` (9, a limited CP user and the public proxy route over HTTP), both
+idempotent and self-cleaning. Run from the site root:
 
 ```sh
 ddev exec php /var/www/craft-eye/tests/integration/checks.php
+ddev exec php /var/www/craft-eye/tests/integration/trust.php
 ```
 
 `tests/manual/` holds two scripts that need the internet: `live-probe.php` exercises the fetcher

@@ -6,21 +6,47 @@ use Craft;
 use craft\helpers\UrlHelper;
 use craft\web\Controller;
 use justinholtweb\eye\elements\Embed;
+use justinholtweb\eye\helpers\RateLimit;
 use justinholtweb\eye\models\EmbedOptions;
 use justinholtweb\eye\Plugin;
 use Throwable;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
+use yii\web\TooManyRequestsHttpException;
 
 /**
  * The control panel side of the embed library.
  */
 class EmbedsController extends Controller
 {
+    /** Framing checks and previews a user without the manage permission may run per minute. */
+    public const FETCHES_PER_MINUTE = 30;
+
     public function beforeAction($action): bool
     {
         if (!parent::beforeAction($action)) {
             return false;
+        }
+
+        // The Embed field calls these from an entry's edit screen, where the author may have no
+        // access to the embed library at all. They read nothing from it: `resolve` matches a URL
+        // against the provider registry, `check` asks the URL itself, and `preview` renders what
+        // was posted (through the same sanitising renderer as the front end).
+        if (in_array($action->id, ['resolve', 'check', 'preview'], true)) {
+            $this->requirePermission('accessCp');
+
+            // `check` and `preview` make outbound requests on the asker's behalf. The fetcher
+            // only ever reaches public addresses, but a budget stops anyone with nothing more
+            // than CP access from using the server to scan them.
+            if (
+                $action->id !== 'resolve'
+                && !Craft::$app->getUser()->checkPermission(Plugin::PERMISSION_MANAGE)
+                && !RateLimit::allowFor('cp-fetch', (string)Craft::$app->getUser()->getId(), self::FETCHES_PER_MINUTE)
+            ) {
+                throw new TooManyRequestsHttpException(Craft::t('eye', 'Too many checks — wait a minute and try again.'));
+            }
+
+            return true;
         }
 
         $this->requirePermission(Plugin::PERMISSION_VIEW);
@@ -165,7 +191,13 @@ class EmbedsController extends Controller
         $plugin = Plugin::getInstance();
 
         try {
-            if ($embedId && ($embed = $plugin->embeds->getEmbedById((int)$embedId))) {
+            // A library embed only for someone who can see the library; the Embed field sends a
+            // bare URL.
+            if (
+                $embedId
+                && Craft::$app->getUser()->checkPermission(Plugin::PERMISSION_VIEW)
+                && ($embed = $plugin->embeds->getEmbedById((int)$embedId))
+            ) {
                 $result = $plugin->embeds->checkFramability($embed, false);
             } else {
                 $plugin->framability->forget($url);
@@ -322,6 +354,19 @@ class EmbedsController extends Controller
         $posted = $request->getBodyParam('options', []);
         $options = $plugin->getSettings()->getDefaultEmbedOptions()
             ->merge(is_array($posted) ? $this->normalizePostedOptions($posted) : []);
+
+        // A proxy preview is a signed proxy URL carrying whatever was posted — script handling
+        // and injected CSS included — and an inline one fetches on the server. Both are what the
+        // manage permission is for.
+        if (
+            in_array($options->mode, [EmbedOptions::MODE_PROXY, EmbedOptions::MODE_INLINE], true)
+            && !Craft::$app->getUser()->checkPermission(Plugin::PERMISSION_MANAGE)
+        ) {
+            return $this->asJson([
+                'html' => '',
+                'error' => Craft::t('eye', 'Previewing proxy and inline embeds needs permission to manage embeds.'),
+            ]);
+        }
 
         try {
             $html = (string)$plugin->renderer->renderUrl($url, $options, ['id' => 'eye-preview']);

@@ -4,7 +4,6 @@ namespace justinholtweb\eye\elements\db;
 
 use craft\elements\db\ElementQuery;
 use craft\helpers\Db;
-use justinholtweb\eye\records\EmbedRecord;
 
 /**
  * @method \justinholtweb\eye\elements\Embed[] all($db = null)

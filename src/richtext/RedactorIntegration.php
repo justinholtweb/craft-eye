@@ -30,14 +30,13 @@ class RedactorIntegration
 
         Event::on(RedactorField::class, RedactorField::EVENT_DEFINE_REDACTOR_CONFIG, function(ModifyRedactorConfigEvent $event) {
             $config = $event->config;
-            $plugins = $config['plugins'] ?? [];
 
-            if (!in_array('eye', $plugins, true)) {
-                $plugins[] = 'eye';
+            // A config that names its own plugins has been curated by hand, and adding to it
+            // would be overruling that. Whoever wrote it adds `eye` to the list themselves.
+            if (!isset($config['plugins'])) {
+                $config['plugins'] = ['eye'];
+                $event->config = $config;
             }
-
-            $config['plugins'] = $plugins;
-            $event->config = $config;
 
             // The picker is a CP asset, not a Redactor one, so it has to be registered here
             // rather than left to the plugin's own JS file.

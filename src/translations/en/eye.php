@@ -21,4 +21,6 @@ return [
     'Couldn’t save embed.' => 'Couldn’t save embed.',
     'Couldn’t delete embed.' => 'Couldn’t delete embed.',
     'Couldn’t create embed.' => 'Couldn’t create embed.',
+    'The URL must start with http:// or https://.' => 'The URL must start with http:// or https://.',
+    'Too many requests. Try again in a minute.' => 'Too many requests. Try again in a minute.',
 ];

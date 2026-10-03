@@ -65,6 +65,59 @@ class EmbedField extends Field
         return $embed;
     }
 
+    /**
+     * A posted value may only change the URL and the options this field lets authors set.
+     *
+     * The input only *shows* the enabled options; without this, anything else could still be
+     * posted — fallback markup, CSS, a sandbox — by someone with nothing more than the right to
+     * edit the entry. Everything else keeps the value it had (or the field's defaults).
+     */
+    public function normalizeValueFromRequest(mixed $value, ?ElementInterface $element): mixed
+    {
+        // A string is a URL. It is *not* decoded as JSON here, the way a stored value is: a
+        // posted `{"url":…,"options":{…}}` would otherwise carry any option it liked straight
+        // past the filter below.
+        if (is_string($value)) {
+            $value = ['url' => $value];
+        }
+
+        if (!is_array($value)) {
+            return $this->normalizeValue($value, $element);
+        }
+
+        $current = $element?->getFieldValue($this->handle);
+        $current = $current instanceof InlineEmbed ? $current : $this->normalizeValue(null, $element);
+
+        $allowed = [];
+
+        foreach ($this->enabledOptions as $choice) {
+            array_push($allowed, ...(EmbedOptions::FIELD_OPTION_KEYS[$choice] ?? []));
+        }
+
+        $posted = is_array($value['options'] ?? null) ? $value['options'] : [];
+
+        $embed = new InlineEmbed();
+        $embed->url = trim((string)($value['url'] ?? ''));
+        $embed->setOptions($current->getOptions()->merge(EmbedOptions::only($posted, $allowed)));
+
+        return $embed;
+    }
+
+    public function getElementValidationRules(): array
+    {
+        return [
+            [
+                function(ElementInterface $element) {
+                    $value = $element->getFieldValue($this->handle);
+
+                    if ($value instanceof InlineEmbed && !$value->getIsEmpty() && !EmbedOptions::isHttpUrl($value->url)) {
+                        $element->addError("field:$this->handle", Craft::t('eye', 'The URL must start with http:// or https://.'));
+                    }
+                },
+            ],
+        ];
+    }
+
     public function serializeValue(mixed $value, ?ElementInterface $element = null): mixed
     {
         $embed = $value instanceof InlineEmbed ? $value : InlineEmbed::fromValue($value);

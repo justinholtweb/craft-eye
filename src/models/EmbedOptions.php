@@ -118,6 +118,37 @@ class EmbedOptions extends Model
         'unsafe-url',
     ];
 
+    /**
+     * What a reference tag may change: `{eye:map:render(click,height=500)}`.
+     *
+     * Anyone who can type into a rich-text field can write a reference tag, and Craft's ref-tag
+     * pattern allows almost any character in it — so a tag may only change where and how an
+     * embed sits on the page, never what it runs: no fallback markup, no CSS, no sandbox, no
+     * proxy rules. Those belong to whoever manages the library embed.
+     */
+    public const REF_TAG_KEYS = [
+        'mode', 'ratio', 'height', 'minHeight', 'maxHeight', 'width', 'align', 'className',
+        'caption', 'title', 'loading', 'timeout', 'showLoader', 'showFallbackLink',
+        'consentTitle', 'consentText', 'consentButtonLabel', 'rememberConsent', 'scrollToTop',
+    ];
+
+    /**
+     * The option keys behind each choice in an Embed field's "options an author may set".
+     *
+     * @var array<string, string[]>
+     */
+    public const FIELD_OPTION_KEYS = [
+        'mode' => ['mode'],
+        'ratio' => ['ratio'],
+        'height' => ['height'],
+        'loading' => ['loading'],
+        'caption' => ['caption'],
+        'title' => ['title'],
+        'align' => ['align'],
+        'consent' => ['consentText'],
+        'extract' => ['extract'],
+    ];
+
     // Size and placement
     // -------------------------------------------------------------------------
 
@@ -340,6 +371,14 @@ class EmbedOptions extends Model
                 'referrerPolicy' => $this->referrerPolicy = in_array($value, self::REFERRER_POLICIES, true) ? (string)$value : $this->referrerPolicy,
                 'scrolling' => $this->scrolling = in_array($value, ['auto', 'yes', 'no'], true) ? (string)$value : $this->scrolling,
                 'linkTarget' => $this->linkTarget = in_array($value, ['blank', 'self', 'parent'], true) ? (string)$value : $this->linkTarget,
+                // The values below end up inside a `style` attribute, a CSS `url()` or a
+                // `<style>` element, where HTML escaping is no protection at all.
+                'width' => $this->width = self::cleanCssLength($value) ?? $this->width,
+                'rootMargin' => $this->rootMargin = self::cleanRootMargin($value) ?? $this->rootMargin,
+                'posterUrl' => $this->posterUrl = self::cleanHttpUrl($value) ?? '',
+                'injectCss' => $this->injectCss = is_scalar($value) ? self::cleanCss((string)$value) : $this->injectCss,
+                'className' => $this->className = is_scalar($value) ? trim(preg_replace('/[^\w\s-]+/', '', (string)$value) ?? '') : $this->className,
+                'id' => $this->id = is_scalar($value) ? (preg_replace('/[^\w-]+/', '', (string)$value) ?? '') : $this->id,
                 default => $this->$key = is_scalar($value) ? (string)$value : $this->$key,
             };
         }
@@ -537,6 +576,71 @@ class EmbedOptions extends Model
 
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Only the given keys of an options array.
+     *
+     * @param array<string, mixed> $values
+     * @param string[] $keys
+     * @return array<string, mixed>
+     */
+    public static function only(array $values, array $keys): array
+    {
+        return array_intersect_key($values, array_flip($keys));
+    }
+
+    /** Whether a URL is one a frame, a link or a poster may point at: http(s), nothing else. */
+    public static function isHttpUrl(string $url): bool
+    {
+        return (bool)preg_match('~^https?://[^\s/?#]+~i', trim($url));
+    }
+
+    /**
+     * CSS that cannot leave the `<style>` element it is written into, and cannot pull in a
+     * stylesheet from somewhere else. `<` is written as the CSS escape `\3c `, which still means
+     * `<` inside a CSS string, so legitimate `content: "<"` survives.
+     */
+    public static function cleanCss(string $css): string
+    {
+        $css = str_replace('<', '\\3c ', $css);
+
+        // An at-keyword spelled with an escape (`@\69mport`) is still `@import` to the browser,
+        // and no pattern for the plain word will match it — so any at-rule with an escape in its
+        // name goes too.
+        $css = preg_replace('/@[\w-]*\\\\[^;{]*(?:;|\{[^}]*\}?)?/', '', $css) ?? '';
+
+        return preg_replace('/@import\b[^;]*;?/i', '', $css) ?? '';
+    }
+
+    private static function cleanHttpUrl(mixed $value): ?string
+    {
+        $value = is_scalar($value) ? trim((string)$value) : '';
+
+        return $value !== '' && self::isHttpUrl($value) ? $value : null;
+    }
+
+    /** `640px`, `80%`, `40rem`, `auto`, `min(100%, 720px)` — one CSS length, no declarations. */
+    private static function cleanCssLength(mixed $value): ?string
+    {
+        $value = is_scalar($value) ? trim((string)$value) : '';
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return $value . 'px';
+        }
+
+        return preg_match('/^[\w\s.%(),+*\/-]+$/', $value) ? $value : null;
+    }
+
+    private static function cleanRootMargin(mixed $value): ?string
+    {
+        $value = is_scalar($value) ? trim((string)$value) : '';
+
+        return preg_match('/^(-?\d+(\.\d+)?(px|%)?\s*){1,4}$/', $value) ? $value : null;
+    }
 
     private static function normalizeKey(string $key): string
     {

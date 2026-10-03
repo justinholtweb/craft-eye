@@ -124,6 +124,9 @@ class Embed extends Element
         return true;
     }
 
+    /**
+     * @return EmbedQuery
+     */
     public static function find(): ElementQueryInterface
     {
         return new EmbedQuery(static::class);
@@ -184,12 +187,12 @@ class Embed extends Element
     /** The URL the `<iframe>` actually points at, which is rarely the one the author pasted. */
     public function getEmbedUrl(): string
     {
-        return $this->getProviderMatch()?->embedUrl ?? (string)$this->url;
+        return $this->getProviderMatch()->embedUrl ?? (string)$this->url;
     }
 
     public function getProviderName(): string
     {
-        return Plugin::getInstance()->providers->getByHandle($this->provider)?->name
+        return Plugin::getInstance()->providers->getByHandle($this->provider)->name
             ?? Craft::t('eye', 'Web page');
     }
 
@@ -245,7 +248,20 @@ class Embed extends Element
             return null;
         }
 
-        return EmbedOptions::parseEmbedOptions($matches[1]);
+        // Anyone who can write rich text can write this tag, so it only gets the presentational
+        // options (see EmbedOptions::REF_TAG_KEYS), and cannot turn an embed into a server-side
+        // fetch that whoever manages it never chose.
+        $overrides = EmbedOptions::only(EmbedOptions::parseEmbedOptions($matches[1]), EmbedOptions::REF_TAG_KEYS);
+
+        if (
+            isset($overrides['mode'])
+            && in_array($overrides['mode'], EmbedOptions::FETCHING_MODES, true)
+            && !$this->getOptions()->getIsFetched()
+        ) {
+            unset($overrides['mode']);
+        }
+
+        return $overrides;
     }
 
     /** The tag an author copies out of the CP. */

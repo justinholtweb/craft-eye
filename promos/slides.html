@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<!-- handmade: hand-tuned deck -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eye — Plugin Store promos</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --charcoal: #0f0f1a;
+    --charcoal-light: #1a1a2e;
+    --charcoal-lighter: #252540;
+    --accent: #49A563;
+    --accent-light: #8FD6A0;
+    --gold: #F2C46D;
+    --off-white: #f0f0f5;
+  }
+
+  html { background: #000; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--off-white);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- slide shell ---------------------------------------------------- */
+  .slide {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at 85% 15%, rgba(73, 165, 99, 0.34) 0%, transparent 40%),
+      radial-gradient(ellipse at 65% 5%,  rgba(143, 214, 160, 0.14) 0%, transparent 35%),
+      radial-gradient(ellipse at 15% 85%, rgba(255, 209, 102, 0.07) 0%, transparent 40%),
+      radial-gradient(ellipse at 35% 95%, rgba(73, 165, 99, 0.14) 0%, transparent 35%),
+      linear-gradient(135deg, #0f0f1a 0%, #0f1a14 30%, #12201a 60%, #0f0f1a 100%);
+  }
+
+  /* Oversized watermark: the mark with the tile stripped, because a rounded square at this
+     size reads as a grey box across the slide rather than as the icon. Anchored bottom-right and
+     running off the right and bottom edges, so the eye sits behind the empty side of each slide
+     rather than behind the headline. */
+  .slide::after {
+    content: '';
+    position: absolute;
+    top: 22%;
+    right: -22%;
+    width: 1400px;
+    height: 1400px;
+    background: url('assets/watermark.svg') no-repeat center / contain;
+    opacity: 0.03;
+    pointer-events: none;
+  }
+
+  /* The cover has the icon itself; a watermark behind it reads as its shadow. */
+  .cover::after { display: none; }
+
+  .slide::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-light), var(--gold), var(--accent));
+    z-index: 5;
+  }
+
+  .inner {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    padding: 118px 130px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* ---- type ------------------------------------------------------------ */
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: rgba(240, 240, 245, 0.62);
+    margin-bottom: 34px;
+  }
+  .eyebrow .rule {
+    width: 58px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--accent-light);
+  }
+
+  h1, h2 {
+    font-family: 'Jersey 20', sans-serif;
+    font-weight: 400;
+    line-height: 0.9;
+    letter-spacing: 0.005em;
+  }
+
+  .gradient-text {
+    background: linear-gradient(100deg, #5BBF77 0%, #8FD6A0 38%, #E3F5E8 66%, #5BBF77 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .lede {
+    font-size: 34px;
+    line-height: 1.5;
+    color: rgba(240, 240, 245, 0.72);
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  /* ---- cover ----------------------------------------------------------- */
+  .cover .inner { gap: 90px; }
+  .cover .copy { flex: 1 1 auto; }
+  .cover h1 { font-size: 168px; margin-bottom: 26px; }
+  .cover .tagline {
+    font-size: 46px;
+    line-height: 1.25;
+    color: rgba(240, 240, 245, 0.78);
+    margin-bottom: 46px;
+    max-width: 900px;
+  }
+  .cover .badges { display: flex; gap: 18px; align-items: center; }
+  .badge {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 14px 26px;
+    border-radius: 999px;
+    border: 2px solid rgba(143, 214, 160, 0.45);
+    color: rgba(240, 240, 245, 0.85);
+  }
+  .badge.free { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .cover .mark { flex: 0 0 auto; }
+  .cover .mark img { width: 420px; height: 420px; display: block; }
+
+  /* ---- feature slides -------------------------------------------------- */
+  .feature .inner { padding-right: 0; }
+  .feature .copy { width: 760px; flex: 0 0 auto; }
+  .feature h2 { font-size: 96px; margin-bottom: 30px; }
+  .feature .lede { max-width: 700px; }
+
+  .points { list-style: none; margin-top: 40px; display: flex; flex-direction: column; gap: 20px; }
+  .points li {
+    display: flex;
+    gap: 16px;
+    font-size: 25px;
+    line-height: 1.4;
+    color: rgba(240, 240, 245, 0.6);
+  }
+  .points li svg { flex: 0 0 auto; margin-top: 4px; }
+
+  /* ---- screenshot slabs ------------------------------------------------ */
+  .shot {
+    position: absolute;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .shot .chrome {
+    height: 40px;
+    background: #2a2a3e;
+    background-image:
+      radial-gradient(circle at 24px 20px, #ff5f57 6px, transparent 6.5px),
+      radial-gradient(circle at 48px 20px, #ffbd2e 6px, transparent 6.5px),
+      radial-gradient(circle at 72px 20px, #28ca42 6px, transparent 6.5px);
+  }
+  .shot .viewport { overflow: hidden; background: #e4edf6; position: relative; }
+  .shot img { display: block; width: 100%; position: absolute; left: 0; }
+
+  .caption {
+    font-size: 22px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(240, 240, 245, 0.5);
+    margin-bottom: 14px;
+  }
+  .caption b { color: var(--accent-light); font-weight: 600; }
+
+  /* ---- before / after -------------------------------------------------- */
+  .compare .inner { flex-direction: column; align-items: flex-start; padding-bottom: 60px; }
+  .compare h2 { font-size: 88px; margin-bottom: 18px; }
+  .compare .lede { font-size: 30px; max-width: 1280px; margin-bottom: 44px; }
+  .compare .pair { display: flex; gap: 56px; width: 100%; }
+  .compare .pane { flex: 1 1 0; min-width: 0; }
+  .compare .shot { position: relative; }
+
+  .arrow {
+    position: absolute;
+    left: 50%;
+    top: 640px;
+    transform: translateX(-50%);
+    z-index: 4;
+    width: 92px;
+    height: 92px;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 12px 40px rgba(73, 165, 99, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ---- closing panel --------------------------------------------------- */
+  .closing .inner { flex-direction: column; align-items: flex-start; justify-content: center; }
+  .closing h2 { font-size: 104px; margin-bottom: 34px; }
+  .closing .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 26px 54px;
+    margin-top: 20px;
+    width: 1420px;
+  }
+  .closing .cell {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(37, 37, 64, 0.42);
+    padding: 28px 32px;
+  }
+  .closing .cell b { display: block; font-size: 28px; margin-bottom: 8px; color: var(--off-white); }
+  .closing .cell span { font-size: 23px; line-height: 1.45; color: rgba(240, 240, 245, 0.58); }
+
+  /* ---- layout diagram slide -------------------------------------------- */
+  .diagram {
+    position: absolute;
+    right: 130px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 800px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(15, 15, 26, 0.72);
+    padding: 44px 48px;
+    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 26px;
+    line-height: 1.65;
+    color: rgba(240, 240, 245, 0.72);
+    white-space: pre;
+  }
+  .diagram .tab { color: var(--off-white); font-weight: 600; }
+  .diagram .marker { color: var(--accent-light); }
+  .diagram .dim { color: rgba(240, 240, 245, 0.38); }
+  .diagram .gold { color: var(--gold); }
+
+  /* ---- footer lockup --------------------------------------------------- */
+  .footer {
+    position: absolute;
+    left: 130px;
+    bottom: 54px;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 22px;
+    color: rgba(240, 240, 245, 0.42);
+  }
+  .footer img { width: 40px; height: 40px; border-radius: 9px; }
+  .footer b { color: rgba(240, 240, 245, 0.72); font-weight: 600; }
+
+  /* Only render the requested slide when screenshotting */
+  body.single .slide { display: none; }
+  body.single .slide.active { display: block; }
+
+  /* ---- control-panel screenshot cards -------------------------------
+     Self-contained: these cards must drop into any deck in the family, and the decks
+     do not share a class system. Only --accent and --off-white are relied on, both of
+     which every deck defines, and both have fallbacks. */
+  .slide.cpcard { display: block; }
+  .cpcard .cpc-inner {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    padding: 112px 120px;
+    display: flex;
+    align-items: center;
+    gap: 70px;
+  }
+  .cpcard .cpc-copy { width: 660px; flex: 0 0 660px; }
+
+  .cpcard .cpc-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 34px;
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent-light, #7aa2c8);
+  }
+  .cpcard .cpc-eyebrow i {
+    display: block;
+    width: 62px;
+    height: 3px;
+    background: var(--accent-light, #7aa2c8);
+    border-radius: 2px;
+  }
+
+  .cpcard .cpc-h2 {
+    font-family: 'Jersey 20', 'Inter', sans-serif;
+    font-size: 88px;
+    line-height: 0.96;
+    font-weight: 400;
+    letter-spacing: 0.005em;
+    margin: 0 0 28px;
+    color: var(--off-white, #f0f0f5);
+  }
+
+  .cpcard .cpc-lede {
+    font-size: 33px;
+    line-height: 1.42;
+    color: rgba(240, 240, 245, 0.66);
+    margin: 0;
+  }
+
+  .cpcard .cpc-points { list-style: none; margin: 40px 0 0; padding: 0; }
+  .cpcard .cpc-points li {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    font-size: 26px;
+    line-height: 1.5;
+    color: rgba(240, 240, 245, 0.72);
+    margin-bottom: 18px;
+  }
+  .cpcard .cpc-points li::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 10px;
+    height: 10px;
+    margin-top: 14px;
+    border-radius: 50%;
+    background: var(--accent, #7aa2c8);
+  }
+
+  .cpcard .cpc-panel { flex: 1 1 auto; min-width: 0; }
+
+  .cpcard .cpc-frame {
+    border-radius: 14px;
+    overflow: hidden;
+    background: #e4edf6;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+  .cpcard .cpc-chrome {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 13px 18px;
+    background: linear-gradient(180deg, #2a2a3d 0%, #21212f 100%);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  }
+  .cpcard .cpc-chrome b { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.16); }
+  .cpcard .cpc-chrome b:nth-child(1) { background: #ff5f57; }
+  .cpcard .cpc-chrome b:nth-child(2) { background: #febc2e; }
+  .cpcard .cpc-chrome b:nth-child(3) { background: #28c840; }
+  .cpcard .cpc-chrome em {
+    margin-left: 12px;
+    font-style: normal;
+    font-size: 19px;
+    letter-spacing: 0.02em;
+    color: rgba(240, 240, 245, 0.45);
+  }
+  .cpcard .cpc-frame img { display: block; width: 100%; height: auto; }
+
+  /* A tall capture is anchored to its top — the interesting rows are always first.
+     The fade makes the cut read as "there is more" rather than as a broken edge. */
+  .cpcard .cpc-frame.cpc-clip { max-height: 620px; position: relative; }
+  .cpcard .cpc-frame.cpc-clip img { object-fit: cover; object-position: top center; max-height: 580px; }
+  .cpcard .cpc-frame.cpc-clip::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 130px;
+    background: linear-gradient(180deg, rgba(228,237,246,0) 0%, rgba(228,237,246,0.92) 78%, #e4edf6 100%);
+  }
+
+  .cpcard .cpc-caption {
+    display: block;
+    margin-top: 20px;
+    font-size: 22px;
+    line-height: 1.45;
+    color: rgba(240, 240, 245, 0.52);
+  }
+  .cpcard .cpc-caption b { color: rgba(240, 240, 245, 0.80); font-weight: 600; }
+
+
+  /* ---- the wire (slide 4) ---------------------------------------------- */
+  .wire {
+    position: absolute; right: 100px; top: 50%; transform: translateY(-50%); width: 1000px;
+    border-radius: 14px; border: 1px solid rgba(255,255,255,0.09); background: rgba(15,15,26,0.78);
+    padding: 40px 44px; font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 21px; line-height: 2.05; color: rgba(240,240,245,0.62); white-space: pre;
+  }
+  .wire .hd { color: rgba(240,240,245,0.4); }
+  .wire .ok { color: #5ee0a0; }
+  .wire .bad { color: #ff6b6b; }
+  .wire .ask { color: var(--gold); }
+  .wire .done { color: var(--accent-light); font-weight: 600; }
+  .wire { width: 1020px; font-size: 22px; }
+  .wire .key { color: rgba(240,240,245,0.4); }
+
+  /* ---- four ways (slide 2) --------------------------------------------- */
+  .ways { position: absolute; right: 120px; top: 50%; transform: translateY(-50%); width: 960px; display: flex; flex-direction: column; gap: 22px; }
+  .way { border-radius: 14px; border: 1px solid rgba(255,255,255,0.09); background: rgba(15,26,20,0.72); padding: 26px 34px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; }
+  .way .bad { font-size: 26px; color: rgba(240,240,245,0.62); display: flex; gap: 14px; align-items: baseline; }
+  .way .bad i { font-style: normal; color: #ff6b6b; font-weight: 700; }
+  .way .fix { font-size: 26px; color: var(--off-white); font-weight: 600; display: flex; gap: 14px; align-items: baseline; }
+  .way .fix i { font-style: normal; color: var(--accent-light); font-weight: 700; }
+
+  /* ---- the nine rules (slide 6) ---------------------------------------- */
+  .rules { position: absolute; right: 110px; top: 50%; transform: translateY(-50%); width: 980px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.09); background: rgba(15,26,20,0.78); padding: 34px 42px; counter-reset: rule; }
+  .rules li { list-style: none; display: flex; gap: 20px; font-size: 24px; line-height: 1.4; color: rgba(240,240,245,0.72); padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .rules li:last-child { border-bottom: 0; }
+  .rules li::before { counter-increment: rule; content: counter(rule); flex: 0 0 34px; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; color: var(--accent-light); font-weight: 700; }
+  .rules li b { color: var(--off-white); font-weight: 600; }
+
+</style>
+</head>
+<body>
+
+<!-- 1 · Cover ============================================================ -->
+<section class="slide cover" data-n="1">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Craft CMS 5</div>
+      <h1 class="gradient-text">Eye</h1>
+      <p class="tagline">Iframes that behave.<br>Embeds that fit, wait, and tell you when they won't work.</p>
+      <div class="badges">
+        <span class="badge free">Free</span>
+        <span class="badge">No editions</span>
+        <span class="badge">No licence key</span>
+      </div>
+    </div>
+    <div class="mark"><img src="assets/icon.svg" alt=""></div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Eye</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-eye</div>
+</section>
+
+<!-- 2 · Four ways ======================================================== -->
+<section class="slide feature" data-n="2">
+  <div class="inner">
+    <div class="copy" style="width: 620px;">
+      <div class="eyebrow"><span class="rule"></span> The problem</div>
+      <h2>Four ways an<br>iframe goes<br>wrong</h2>
+      <p class="lede" style="max-width: 600px;">Each one is a separate fix. Eye makes all four.</p>
+    </div>
+  </div>
+  <div class="ways">
+    <div class="way"><div class="bad"><i>✕</i> The wrong size</div><div class="fix"><i>✓</i> Ratio, fixed or auto height</div></div>
+    <div class="way"><div class="bad"><i>✕</i> Loads before anyone scrolls</div><div class="fix"><i>✓</i> Lazy, or nothing until a click</div></div>
+    <div class="way"><div class="bad"><i>✕</i> Hands readers to a third party</div><div class="fix"><i>✓</i> Consent cards, cookie-free hosts</div></div>
+    <div class="way"><div class="bad"><i>✕</i> Refused, with a blank box</div><div class="fix"><i>✓</i> Checked when you save</div></div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Eye</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-eye</div>
+</section>
+
+<!-- 3 · Paste a URL ====================================================== -->
+<section class="slide feature" data-n="3">
+  <div class="inner">
+    <div class="copy" style="width: 600px;">
+      <div class="eyebrow"><span class="rule"></span> 27 providers</div>
+      <h2>Paste a URL.<br>Eye knows<br>the rest.</h2>
+      <p class="lede" style="max-width: 560px;">The real embed URL, the natural shape, the allow tokens and the cookie-free host.</p>
+      <ul class="points">
+        <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8FD6A0" stroke-width="3"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> <span class="t">Works in CKEditor, Redactor, fields and Twig</span></li>
+        <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8FD6A0" stroke-width="3"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> <span class="t">Ten pastes of one link make one entry</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="wire"><span class="key">pasted   </span>https://youtu.be/dQw4w9WgXcQ?t=42
+<span class="key">provider </span><span class="done">YouTube</span>
+<span class="key">frame    </span><span class="ok">youtube-nocookie.com</span>/embed/dQw4w9WgXcQ
+<span class="key">         </span>?start=42
+<span class="key">shape    </span>16:9, responsive
+<span class="key">allow    </span>autoplay; encrypted-media; web-share;
+<span class="key">         </span>picture-in-picture; fullscreen; …
+<span class="key">framing  </span><span class="ok">● Embeddable</span>
+<span class="key">tag      </span><span class="ask">{eye:launch-video:render}</span></div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Eye</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-eye</div>
+</section>
+
+<!-- 4 · Consent (real front-end screenshot) ============================== -->
+<section class="slide cpcard" data-n="4">
+  <div class="cpc-inner">
+    <div class="cpc-copy">
+      <div class="cpc-eyebrow"><i></i> On the front end</div>
+      <h2 class="cpc-h2">Consent that<br>actually waits</h2>
+      <p class="cpc-lede">The frame sits inside a <span class="mono">&lt;template&gt;</span>, so nothing is requested until the reader asks.</p>
+      <ul class="cpc-points">
+        <li>Unlike a hidden iframe, which still loads</li>
+        <li>The choice can be remembered per host</li>
+      </ul>
+    </div>
+    <div class="cpc-panel">
+      <figure class="cpc-frame">
+        <div class="cpc-chrome"><b></b><b></b><b></b><em>Click to load</em></div>
+        <img src="shots/eye-consent-card.png" alt="">
+      </figure>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Eye</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-eye</div>
+</section>
+
+<!-- 5 · Framing check (real CP screenshot) =============================== -->
+<section class="slide cpcard" data-n="5">
+  <div class="cpc-inner">
+    <div class="cpc-copy">
+      <div class="cpc-eyebrow"><i></i> In the control panel</div>
+      <h2 class="cpc-h2">Know before<br>you publish</h2>
+      <p class="cpc-lede">A refused frame gives the browser no signal. Eye reads X-Frame-Options and frame-ancestors when you save.</p>
+      <ul class="cpc-points">
+        <li>Plain language, and what to do instead</li>
+        <li><span class="mono">eye/embeds/check --failOnProblem</span> for CI</li>
+      </ul>
+    </div>
+    <div class="cpc-panel">
+      <figure class="cpc-frame cpc-clip">
+        <div class="cpc-chrome"><b></b><b></b><b></b><em>Eye → Embeds</em></div>
+        <img src="shots/eye-framing.png" alt="">
+      </figure>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Eye</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-eye</div>
+</section>
+
+<!-- 6 · The proxy ======================================================== -->
+<section class="slide feature" data-n="6">
+  <div class="inner">
+    <div class="copy" style="width: 600px;">
+      <div class="eyebrow"><span class="rule"></span> Proxy mode</div>
+      <h2>A proxy that<br>isn't an open<br>proxy</h2>
+      <p class="lede" style="max-width: 560px;">Serve a page that refuses framing from your own domain. Off by default, and it runs on an allowlist.</p>
+    </div>
+  </div>
+  <ol class="rules">
+    <li><span><b>http and https</b> only</span></li>
+    <li><span>Host on an <b>allowlist</b>, with no allow-all value</span></li>
+    <li><span><b>Every</b> resolved address must be public</span></li>
+    <li><span>Connection <b>pinned</b> to the address that was checked</span></li>
+    <li><span>Redirects followed by hand, <b>re-checked</b> at every hop</span></li>
+    <li><span>Capped by size, time and content type</span></li>
+    <li><span>Nothing of the reader's is <b>forwarded</b></span></li>
+    <li><span>Only Eye's own user agent goes out</span></li>
+    <li><span>The public route <b>never takes a URL</b></span></li>
+  </ol>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Eye</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-eye</div>
+</section>
+
+<!-- 7 · Closing ========================================================== -->
+<section class="slide closing" data-n="7">
+  <div class="inner">
+    <div class="eyebrow"><span class="rule"></span> Free for Craft CMS 5</div>
+    <h2>Every frame on the site,<br>in one index</h2>
+    <div class="grid">
+      <div class="cell"><b>One library</b><span>A pasted URL becomes an element, so every third-party frame can be audited, switched off or put behind consent.</span></div>
+      <div class="cell"><b>Any editor, or none</b><span>Craft's own reference tags do the rendering. Switch editors and every embed keeps working.</span></div>
+      <div class="cell"><b>Five modes</b><span>Aspect ratio, fixed, auto height, proxy and inline, with a 1 KB child script for cross-origin height.</span></div>
+      <div class="cell"><b>Nothing else to install</b><span>No build step, and no runtime dependencies beyond Craft's own.</span></div>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Eye</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-eye</div>
+</section>
+
+<script>
+  var n = new URLSearchParams(location.search).get('s');
+  if (n) {
+    document.body.classList.add('single');
+    var el = document.querySelector('.slide[data-n="' + n + '"]');
+    if (el) el.classList.add('active');
+  }
+</script>
+</body>
+</html>

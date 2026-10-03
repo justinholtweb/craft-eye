@@ -194,6 +194,15 @@ class Framability extends Component
             return $result;
         }
 
+        // Not a real value — but browsers ignore what they don't recognise, and the sites that
+        // send it (Calendly, for one) mean exactly what it looks like.
+        if ($directive === 'ALLOWALL') {
+            $result->status = FramabilityResult::STATUS_ALLOWED;
+            $result->message = Craft::t('eye', 'This page sends X-Frame-Options: ALLOWALL, which is not a standard value; browsers ignore it, so the page will embed.');
+
+            return $result;
+        }
+
         $result->status = FramabilityResult::STATUS_UNKNOWN;
         $result->message = Craft::t('eye', 'Eye did not understand this page’s X-Frame-Options header: {value}', ['value' => $value]);
 

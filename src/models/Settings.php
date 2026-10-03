@@ -73,7 +73,10 @@ class Settings extends Model
      *
      * There is no "allow everything" value on purpose.
      *
-     * @var string[]
+     * Strings, or — straight from the settings form — editable-table rows of `['host' => …]`
+     * until validation normalises them.
+     *
+     * @var array<int, string|array{host?: string}>
      */
     public array $allowedHosts = [];
 

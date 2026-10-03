@@ -416,8 +416,10 @@ class Providers extends Component
                         return null;
                     }
 
-                    [, $zoom, $lat, $lon] = $hash;
-                    $span = 360 / (2 ** max(1, (int)$zoom)) * 2;
+                    $zoom = (int)$hash[1];
+                    $lat = (float)$hash[2];
+                    $lon = (float)$hash[3];
+                    $span = 360 / (2 ** max(1, $zoom)) * 2;
 
                     return 'https://www.openstreetmap.org/export/embed.html?' . http_build_query([
                         'bbox' => implode(',', [$lon - $span, $lat - $span / 2, $lon + $span, $lat + $span / 2]),
@@ -523,7 +525,7 @@ class Providers extends Component
                 'homepage' => 'https://codepen.io',
                 'mode' => EmbedOptions::MODE_FIXED,
                 'height' => 400,
-                'patterns' => ['~^https?://codepen\.io/([\w-]+)/(?:pen|embed|details|full)/([\w-]+)~i'],
+                'patterns' => ['~^https?://codepen\.io/((?:team/)?[\w-]+)/(?:pen|embed|details|full)/([\w-]+)~i'],
                 'build' => fn(array $m) => "https://codepen.io/$m[1]/embed/$m[2]?default-tab=result",
             ],
 

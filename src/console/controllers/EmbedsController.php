@@ -2,7 +2,6 @@
 
 namespace justinholtweb\eye\console\controllers;
 
-use Craft;
 use craft\console\Controller;
 use craft\helpers\Console;
 use justinholtweb\eye\elements\Embed;

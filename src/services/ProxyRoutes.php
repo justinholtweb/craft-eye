@@ -7,6 +7,7 @@ use craft\base\Component;
 use craft\helpers\Json;
 use craft\helpers\UrlHelper;
 use justinholtweb\eye\models\EmbedOptions;
+use justinholtweb\eye\Plugin;
 
 /**
  * The URLs proxy mode points frames at, and the only thing that decides what those URLs may
@@ -33,8 +34,11 @@ class ProxyRoutes extends Component
      */
     public const PARAM = 'eyeref';
 
+    /** Cache-busts a stored embed's proxy URL; the controller ignores it. */
+    public const VERSION_PARAM = 'eyev';
+
     /** Bump if the payload shape changes, so old signed URLs stop being honoured. */
-    private const PAYLOAD_VERSION = 1;
+    private const PAYLOAD_VERSION = 2;
 
     /** The only options a signed payload may carry. Anything else comes from the plugin. */
     private const CARRIED = ['extract', 'remove', 'injectCss', 'stripScripts', 'linkTarget', 'cacheDuration'];
@@ -42,7 +46,20 @@ class ProxyRoutes extends Component
     public function urlFor(string $embedUrl, EmbedOptions $options, ?string $uid = null): string
     {
         if ($uid) {
-            return UrlHelper::siteUrl("eye/proxy/$uid");
+            // Versioned by what shapes the response, because the response is cached by the browser:
+            // without this, changing an embed's script handling would leave readers with the old
+            // document (and the old sandbox) while the page around it expects the new one — and
+            // changing its URL would keep serving the old page.
+            $carried = [];
+
+            foreach (self::CARRIED as $key) {
+                $carried[$key] = $options->$key;
+            }
+
+            $carried['strip'] = Plugin::getInstance()->proxy->stripsScripts($options);
+            $carried['url'] = $embedUrl;
+
+            return UrlHelper::siteUrl("eye/proxy/$uid", [self::VERSION_PARAM => substr(md5(Json::encode($carried)), 0, 10)]);
         }
 
         return UrlHelper::siteUrl('eye/proxy', [self::PARAM => $this->sign($embedUrl, $options)]);
@@ -63,7 +80,7 @@ class ProxyRoutes extends Component
             'o' => $carried,
         ]));
 
-        return Craft::$app->getSecurity()->hashData($payload);
+        return Craft::$app->getSecurity()->hashData($payload, $this->signingKey());
     }
 
     /**
@@ -72,7 +89,7 @@ class ProxyRoutes extends Component
      */
     public function verify(string $signed): ?array
     {
-        $payload = Craft::$app->getSecurity()->validateData($signed);
+        $payload = Craft::$app->getSecurity()->validateData($signed, $this->signingKey());
 
         if ($payload === false) {
             return null;
@@ -98,5 +115,15 @@ class ProxyRoutes extends Component
         ));
 
         return ['url' => (string)$data['url'], 'options' => $options];
+    }
+
+    /**
+     * The site's security key, narrowed to this one purpose. Craft's `|hash` filter and every
+     * other `hashData()` caller sign with the bare key, so without the suffix anything one of
+     * them signed would also be a valid proxy payload.
+     */
+    private function signingKey(): string
+    {
+        return Craft::$app->getConfig()->getGeneral()->securityKey . '|eye-proxy';
     }
 }

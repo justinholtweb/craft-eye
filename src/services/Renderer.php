@@ -6,7 +6,6 @@ use Craft;
 use craft\base\Component;
 use craft\helpers\Html;
 use craft\helpers\Json;
-use craft\helpers\StringHelper;
 use craft\helpers\UrlHelper;
 use craft\web\View;
 use justinholtweb\eye\elements\Embed;
@@ -68,6 +67,14 @@ class Renderer extends Component
             return new Markup('', Craft::$app->charset);
         }
 
+        // The URL becomes a frame's `src` and the fallback link's `href`, where `javascript:` runs.
+        // Library embeds are validated on save; inline values and template calls are not.
+        if (!EmbedOptions::isHttpUrl($url)) {
+            Craft::warning('Eye refused to render a URL that is not http(s): ' . $url, Plugin::LOG_CATEGORY);
+
+            return new Markup('', Craft::$app->charset);
+        }
+
         $plugin = Plugin::getInstance();
         $match = $plugin->providers->match($url);
 
@@ -77,7 +84,7 @@ class Renderer extends Component
             $options = EmbedOptions::fromArray($match->getOptionDefaults())->merge($options->toStorageArray());
         }
 
-        $embedUrl = $match?->embedUrl ?? $url;
+        $embedUrl = $match->embedUrl ?? $url;
         $id = Html::id((string)($context['id'] ?? sprintf('eye-%s', $context['handle'] ?? ++$this->counter)));
 
         $variables = array_merge([
@@ -234,7 +241,12 @@ class Renderer extends Component
                 'scrollToTop' => $options->scrollToTop,
                 // A proxied frame is on this origin by construction, so the runtime can skip the
                 // handshake and read the document directly.
-                'sameOrigin' => $options->mode === EmbedOptions::MODE_PROXY ? true : $this->isSameOrigin($embedUrl),
+                //
+                // Unless its scripts are kept: then it is sandboxed onto an opaque origin (see
+                // ProxyController) and reports its height with the injected child script instead.
+                'sameOrigin' => $options->mode === EmbedOptions::MODE_PROXY
+                    ? Plugin::getInstance()->proxy->stripsScripts($options)
+                    : $this->isSameOrigin($embedUrl),
             ];
         }
 
@@ -278,7 +290,7 @@ class Renderer extends Component
             'text' => $options->consentText
                 ?: ($provider?->consentText ?: Craft::t('eye', 'This content is hosted by {name}. Loading it will share your IP address with them.', ['name' => $name])),
             'button' => $options->consentButtonLabel ?: Craft::t('eye', 'Load content'),
-            'poster' => $options->posterUrl ?: ($match?->posterUrl ?? ''),
+            'poster' => $this->cssUrl($options->posterUrl ?: ($match->posterUrl ?? '')),
             'name' => $name,
         ];
     }
@@ -292,13 +304,30 @@ class Renderer extends Component
         $name = $provider && !$provider->getIsGeneric() ? $provider->name : (parse_url($url, PHP_URL_HOST) ?: $url);
 
         return [
-            'html' => $options->fallback,
+            // Purified, whoever wrote it: the template prints it raw.
+            'html' => $options->fallback !== '' ? Plugin::getInstance()->proxy->purify($options->fallback) : '',
             'showLink' => $options->showFallbackLink,
             'url' => $url,
             'title' => $label ?: Craft::t('eye', 'This content could not be loaded'),
             'text' => Craft::t('eye', '{name} would not load in this page.', ['name' => $name]),
             'linkLabel' => Craft::t('eye', 'Open in a new tab'),
         ];
+    }
+
+    /**
+     * A URL that is safe inside CSS `url(…)` in a `style` attribute: http(s) only, with every
+     * character that could close the `url()` or the declaration percent-encoded.
+     */
+    private function cssUrl(string $url): string
+    {
+        if ($url === '' || !EmbedOptions::isHttpUrl($url)) {
+            return '';
+        }
+
+        return strtr($url, [
+            '"' => '%22', "'" => '%27', '(' => '%28', ')' => '%29', '\\' => '%5C',
+            ' ' => '%20', ';' => '%3B', "\n" => '', "\r" => '',
+        ]);
     }
 
     /**
@@ -331,7 +360,7 @@ class Renderer extends Component
         $settings = Plugin::getInstance()->getSettings();
         $view = Craft::$app->getView();
 
-        if ($this->assetsRegistered || !$view instanceof View) {
+        if ($this->assetsRegistered) {
             return;
         }
 

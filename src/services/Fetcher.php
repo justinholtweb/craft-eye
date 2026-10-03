@@ -4,10 +4,14 @@ namespace justinholtweb\eye\services;
 
 use Craft;
 use craft\base\Component;
+use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Handler\CurlHandler;
+use GuzzleHttp\HandlerStack;
 use justinholtweb\eye\helpers\Ip;
 use justinholtweb\eye\models\FetchResult;
 use justinholtweb\eye\Plugin;
+use Psr\Http\Message\ResponseInterface;
 use yii\base\Exception;
 
 /**
@@ -144,7 +148,7 @@ class Fetcher extends Component
             throw new Exception(Craft::t('eye', 'Eye will not fetch a URL containing credentials.'));
         }
 
-        $addresses = Ip::resolvePublic($host);
+        $addresses = $this->addressesFor($host);
 
         if (!$addresses) {
             throw new Exception(Craft::t('eye', '{host} does not resolve to a public address.', ['host' => $host]));
@@ -160,12 +164,22 @@ class Fetcher extends Component
         $maxBytes = (int)($options['maxBytes'] ?? $settings->proxyMaxBytes);
         $headersOnly = !empty($options['headersOnly']);
 
-        $client = Craft::createGuzzleClient();
+        // Not Craft::createGuzzleClient(): that applies the site's `httpProxy` and
+        // `config/guzzle.php`, and a proxy resolves the host itself, which would make the address
+        // check above meaningless. And the curl handler explicitly, because Guzzle's default
+        // stack hands a request to PHP's stream wrapper whenever it can — and the stream wrapper
+        // ignores every `curl` option below, the pin included, and does its own DNS lookup.
+        $client = new Client(['handler' => HandlerStack::create(new CurlHandler())]);
+
+        // The curl handler buffers the body rather than streaming it, so the size cap is
+        // enforced as the bytes arrive: the progress callback aborts the transfer the moment it
+        // passes the limit. A header probe aborts as soon as it has the headers.
+        $headers = null;
+        $tooLarge = false;
 
         try {
-            $response = $client->request($headersOnly ? 'GET' : 'GET', $url, [
+            $response = $client->request('GET', $url, [
                 'allow_redirects' => false,
-                'stream' => true,
                 'http_errors' => false,
                 'connect_timeout' => min($timeout, 10),
                 'timeout' => $timeout,
@@ -174,22 +188,63 @@ class Fetcher extends Component
                     'Accept' => 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1',
                     'Accept-Language' => 'en',
                 ],
-                // The pin. Without it, the address checked above and the address connected to
-                // are two separate DNS lookups, and everything between them is a race an
-                // attacker controls.
+                'on_headers' => function(ResponseInterface $response) use (&$headers, &$tooLarge, $headersOnly, $maxBytes) {
+                    $headers = $response;
+
+                    // A declared length already over the cap saves reading anything at all.
+                    if (!$headersOnly && (int)$response->getHeaderLine('Content-Length') > $maxBytes) {
+                        $tooLarge = true;
+
+                        throw new Exception('Too large.');
+                    }
+                },
                 'curl' => [
-                    CURLOPT_RESOLVE => array_map(fn(string $ip) => "$host:$port:$ip", $addresses),
+                    // The pin. Without it, the address checked above and the address connected
+                    // to are two separate DNS lookups, and everything between them is a race an
+                    // attacker controls.
+                    // One entry carrying every address: curl keys the cache on host and port, so
+                    // separate entries replace each other and only the last survives. IPv4 first,
+                    // since plenty of servers have no IPv6 route, and IPv6 in brackets.
+                    CURLOPT_RESOLVE => [sprintf('%s:%d:%s', $host, $port, implode(',', $this->resolveList($addresses)))],
+                    CURLOPT_PROXY => '',
+                    CURLOPT_NOPROXY => '*',
                     CURLOPT_COOKIEFILE => '',
                     CURLOPT_COOKIEJAR => '',
                     CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
                     CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+                    CURLOPT_NOPROGRESS => false,
+                    CURLOPT_XFERINFOFUNCTION => function($handle, int $downloadTotal, int $downloaded) use (&$headers, &$tooLarge, $headersOnly, $maxBytes): int {
+                        if ($headersOnly && $headers !== null) {
+                            return 1;
+                        }
+
+                        if ($downloaded > $maxBytes) {
+                            $tooLarge = true;
+
+                            return 1;
+                        }
+
+                        return 0;
+                    },
                 ],
             ]);
         } catch (GuzzleException $e) {
-            throw new Exception(Craft::t('eye', 'Could not reach {host}: {message}', [
-                'host' => $host,
-                'message' => $e->getMessage(),
-            ]), 0, $e);
+            if ($tooLarge) {
+                throw new Exception(Craft::t('eye', 'The page at {host} is larger than Eye’s {limit} limit.', [
+                    'host' => $host,
+                    'limit' => Craft::$app->getFormatter()->asShortSize($maxBytes),
+                ]), 0, $e);
+            }
+
+            // A probe that aborted on purpose once it had the headers.
+            if ($headersOnly && $headers !== null) {
+                $response = $headers;
+            } else {
+                throw new Exception(Craft::t('eye', 'Could not reach {host}: {message}', [
+                    'host' => $host,
+                    'message' => $e->getMessage(),
+                ]), 0, $e);
+            }
         }
 
         $status = $response->getStatusCode();
@@ -233,17 +288,6 @@ class Fetcher extends Component
             ]));
         }
 
-        // A declared length that is already over the cap saves reading anything at all — but it
-        // is only a claim, so the streaming cap below still does the real work.
-        $declared = (int)$response->getHeaderLine('Content-Length');
-
-        if ($declared > $maxBytes) {
-            throw new Exception(Craft::t('eye', 'The page at {host} is larger than Eye’s {limit} limit.', [
-                'host' => $host,
-                'limit' => Craft::$app->getFormatter()->asShortSize($maxBytes),
-            ]));
-        }
-
         $body = $response->getBody();
         $buffer = '';
 
@@ -264,6 +308,32 @@ class Fetcher extends Component
         $result->body = $buffer;
 
         return $result;
+    }
+
+    /**
+     * Every address `$host` resolves to, if all of them are public; otherwise none.
+     *
+     * Its own method so a check can substitute an address and prove the connection is pinned to
+     * it rather than looked up again.
+     *
+     * @return string[]
+     */
+    protected function addressesFor(string $host): array
+    {
+        return Ip::resolvePublic($host);
+    }
+
+    /**
+     * Addresses in the form `CURLOPT_RESOLVE` takes them.
+     *
+     * @param string[] $addresses
+     * @return string[]
+     */
+    private function resolveList(array $addresses): array
+    {
+        usort($addresses, fn(string $a, string $b) => str_contains($a, ':') <=> str_contains($b, ':'));
+
+        return array_map(fn(string $ip) => str_contains($ip, ':') ? "[$ip]" : $ip, $addresses);
     }
 
     /**

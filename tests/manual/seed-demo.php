@@ -1,11 +1,11 @@
 <?php
+
 // Sets up demo embeds and turns the proxy on in the harness. Not part of the check suite.
 $root = getcwd();
 require $root . '/bootstrap.php';
 $app = require CRAFT_VENDOR_PATH . '/craftcms/cms/bootstrap/console.php';
 
 use justinholtweb\eye\elements\Embed;
-use justinholtweb\eye\models\EmbedOptions;
 use justinholtweb\eye\Plugin;
 
 $plugin = Plugin::getInstance();
