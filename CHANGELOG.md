@@ -2,8 +2,7 @@
 
 All notable changes to Eye are documented here.
 
-## Unreleased
-
+## 5.1.0 — 2026-10-09
 > {warning} Consent cards no longer hotlink the provider's poster. Choose a **Poster volume** under
 > **Settings → Plugins → Eye → Posters** so Eye can download a copy there. Until you do, cards show
 > no poster. To keep the old behaviour, set **Posters** to **Hotlinked**.

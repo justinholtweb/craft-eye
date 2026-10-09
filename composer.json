@@ -1,7 +1,7 @@
 {
     "name": "justinholtweb/craft-eye",
     "description": "Iframes that behave — a smarter embed experience for Craft CMS content: provider-aware embeds, responsive and auto height, lazy and click-to-load, and a guarded proxy for pages that refuse to be framed.",
-    "version": "5.0.0",
+    "version": "5.1.0",
     "type": "craft-plugin",
     "keywords": [
         "craftcms",
