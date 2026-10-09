@@ -58,6 +58,54 @@ injection always work) · `inline` (fetched, extracted, purified, spliced in wit
 - `framability` — X-Frame-Options / frame-ancestors verdicts, cached
 - `proxy` — fetch → extract → rewrite → purify → cache
 - `proxyRoutes` — builds and verifies the signed URLs proxy mode points frames at
+- `consent` — which consent manager the runtime listens to (Toss first), and an embed's category
+- `posters` — self-hosted posters for the consent card: lookup by URL, queue, download, describe
+
+### Consent managers (Toss consumer)
+
+Eye is a consumer of Toss's consent contract (craft-toss `docs/consent-api.md`, version 1). This is
+documented in `docs/consent.md`.
+
+- **PHP never names a Toss class.** `Consent::tossIsActive()` goes through
+  `getPlugin('toss')->get('consent')->isActive()` behind `isPluginEnabled('toss')`, plus
+  `method_exists`. Anything unexpected counts as "not active". That way a site without Toss can't
+  fatal, and phpstan doesn't need Toss.
+- **The server sends only site facts.** The card's runtime config gets `consent.category`,
+  `consent.manager` (`auto` resolved to `toss` when Toss is active) and `consent.provider`. These
+  are the same for every visitor, so cached pages stay correct. The visitor's answer is read only in
+  the browser. A check renders with and without a Toss cookie and asserts the output is identical.
+- **Runtime state is three-valued**, matching Toss: only `true` opens a card. `necessary` counts
+  as granted only once some manager has spoken (`heard`). Withdrawing consent closes only cards
+  with `loadedBy === 'manager'`. A reader's click is their own consent, so those stay open.
+- **Adapters** in `eye.js`: Toss (`onConsent`, or the `toss:consent` event if Toss hasn't run
+  yet), Cookiebot, CookieYes, Klaro (per service: a service named after the provider decides first),
+  and Consent Mode (wraps `dataLayer.push`; a `default` that denies means `null`).
+  `Eye.setConsent()` is the generic adapter. `auto` starts all four browser adapters; each does
+  nothing if its manager isn't on the page.
+- **Category is not in `REF_TAG_KEYS` or `FIELD_OPTION_KEYS`.** A tag that sets `necessary` would
+  skip asking.
+- `consentForAllEmbeds` forces `loading: click` in `Renderer::renderUrl()` after the provider
+  defaults are merged. It applies to cross-origin and proxy frames, not to same-origin or inline
+  embeds.
+
+### Self-hosted posters
+
+- **Keyed by URL** (`eye_posters`, sha1 `urlHash` unique, `assetId` FK CASCADE), not by embed. This
+  lets field values and `craft.eye.url()` work too. Deleting the asset deletes the row, so the next
+  render queues the download again.
+- **`posterMode` `local` (default) shows the copy or nothing.** It never falls back to hotlinking.
+  `displayUrl()` depends only on the database, never on the visitor. Its memo is keyed by mode and
+  URL.
+- **`Fetcher::fetchImage()`** reuses `request()` with `hosts` (which replaces the site allowlist
+  rather than adding to it, and is re-checked on every redirect hop), `contentTypes` (raster images;
+  a missing type is refused) and `maxBytes`. It doesn't depend on `proxyEnabled`. `Posters` then
+  checks the bytes with `getimagesizefromstring`. SVG is never accepted.
+- **Poster hosts come from the registry** (`Provider::$posterHosts`, YouTube only so far). The
+  proxy's `allowedHosts` count only while the proxy is usable. A poster on the site's own host is
+  shown as it is.
+- **The queue is deduped by the row:** insert a `pending` row, catch `IntegrityException`, then push.
+  Failed rows retry after a day. Pending rows older than an hour are re-queued. The job records
+  failures and doesn't rethrow them.
 
 ### Proxy safety
 
@@ -147,6 +195,14 @@ documentation ranges, 6to4, NAT64 — and IPv4-mapped IPv6, which is the interes
   `X-Forwarded-For` says. `RateLimit` charges `getRemoteIP()` until a site configures
   `trustedHosts`.
 
+- **Poster fetch tests run against the harness's own web server.** A `Fetcher` subclass pins every
+  host to `127.0.0.1`, and nginx serves files written into `@webroot` for whatever `Host` is
+  asked for. A one-line PHP file in the web root acts as the redirect source. Craft's own `/admin`
+  answers 403 to a foreign `Host`.
+- **`downloadAll()` visits every embed in the library.** In the shared harness that includes other
+  people's embeds, so `privacy.php` records each URL it saw and deletes those rows when it
+  finishes.
+
 See also `[[craft-plugin-gotchas]]` in the shared memory for family-wide traps.
 
 ## Testing
@@ -155,7 +211,9 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 
 ```sh
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-eye/tests/integration/checks.php   # 140 checks
-docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-eye/tests/integration/trust.php    # 9, limited CP user + proxy route over HTTP
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-eye/tests/integration/trust.php    # 10, limited CP user + proxy route over HTTP
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-eye/tests/integration/privacy.php  # 45, consent + posters (pinned to the harness, no network)
+node --test tests/js/runtime.test.mjs                                                                      # 22, the runtime's consent adapters on a fake DOM
 docker exec ddev-plugin-testing-web bash -c 'find /var/www/craft-eye/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 docker exec -w /sites/craft-eye ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'   # level 4, clean
 ```

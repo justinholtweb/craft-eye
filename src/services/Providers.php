@@ -133,6 +133,25 @@ class Providers extends Component
     }
 
     /**
+     * Every host a provider's poster can come from — the only hosts Eye downloads a poster from
+     * on a provider's behalf.
+     *
+     * @return string[]
+     */
+    public function posterHosts(): array
+    {
+        $hosts = [];
+
+        foreach ($this->getAll() as $provider) {
+            foreach ($provider->posterHosts as $host) {
+                $hosts[] = strtolower($host);
+            }
+        }
+
+        return array_values(array_unique($hosts));
+    }
+
+    /**
      * Options for a provider `<select>`.
      *
      * @return array<int, array{label: string, value: string}>
@@ -173,6 +192,8 @@ class Providers extends Component
                 'allow' => $video,
                 'hasPrivacyVariant' => true,
                 'consentText' => 'This will load a video from YouTube, which may set cookies.',
+                // Where the poster comes from, and so the only hosts Eye will download one from.
+                'posterHosts' => ['i.ytimg.com', 'img.youtube.com'],
                 'patterns' => [
                     '~^https?://(?:www\.|m\.)?youtube(?:-nocookie)?\.com/watch\?[^#]*\bv=([\w-]{6,})~i',
                     '~^https?://youtu\.be/([\w-]{6,})~i',
@@ -402,6 +423,7 @@ class Providers extends Component
             'openstreetmap' => [
                 'name' => 'OpenStreetMap',
                 'homepage' => 'https://www.openstreetmap.org',
+                'consentCategory' => 'preferences',
                 'ratio' => '4:3',
                 'allowFullscreen' => false,
                 'patterns' => ['~^https?://(?:www\.)?openstreetmap\.org/~i'],
@@ -464,6 +486,7 @@ class Providers extends Component
             'calendly' => [
                 'name' => 'Calendly',
                 'homepage' => 'https://calendly.com',
+                'consentCategory' => 'preferences',
                 'mode' => EmbedOptions::MODE_FIXED,
                 'height' => 700,
                 'allowFullscreen' => false,
@@ -475,6 +498,7 @@ class Providers extends Component
             'typeform' => [
                 'name' => 'Typeform',
                 'homepage' => 'https://www.typeform.com',
+                'consentCategory' => 'preferences',
                 'mode' => EmbedOptions::MODE_FIXED,
                 'height' => 600,
                 'allowFullscreen' => false,
@@ -485,6 +509,7 @@ class Providers extends Component
             'airtable' => [
                 'name' => 'Airtable',
                 'homepage' => 'https://airtable.com',
+                'consentCategory' => 'preferences',
                 'mode' => EmbedOptions::MODE_FIXED,
                 'height' => 533,
                 'allowFullscreen' => false,
@@ -495,6 +520,7 @@ class Providers extends Component
             'figma' => [
                 'name' => 'Figma',
                 'homepage' => 'https://www.figma.com',
+                'consentCategory' => 'preferences',
                 'ratio' => '16:9',
                 'allow' => ['clipboard-write'],
                 'patterns' => ['~^https?://(?:www\.)?figma\.com/(file|design|proto|board|slides)/~i'],
@@ -507,6 +533,7 @@ class Providers extends Component
             'miro' => [
                 'name' => 'Miro',
                 'homepage' => 'https://miro.com',
+                'consentCategory' => 'preferences',
                 'ratio' => '16:9',
                 'patterns' => ['~^https?://miro\.com/app/(?:board|live-embed)/([\w=-]+)~i'],
                 'build' => fn(array $m) => "https://miro.com/app/live-embed/$m[1]/?moveToViewport=&embedAutoplay=true",
@@ -515,6 +542,7 @@ class Providers extends Component
             'canva' => [
                 'name' => 'Canva',
                 'homepage' => 'https://www.canva.com',
+                'consentCategory' => 'preferences',
                 'ratio' => '16:9',
                 'patterns' => ['~^https?://(?:www\.)?canva\.com/design/([\w-]+)/([\w-]+)~i'],
                 'build' => fn(array $m) => "https://www.canva.com/design/$m[1]/$m[2]/view?embed",
@@ -523,6 +551,7 @@ class Providers extends Component
             'codepen' => [
                 'name' => 'CodePen',
                 'homepage' => 'https://codepen.io',
+                'consentCategory' => 'preferences',
                 'mode' => EmbedOptions::MODE_FIXED,
                 'height' => 400,
                 'patterns' => ['~^https?://codepen\.io/((?:team/)?[\w-]+)/(?:pen|embed|details|full)/([\w-]+)~i'],
@@ -532,6 +561,7 @@ class Providers extends Component
             'jsfiddle' => [
                 'name' => 'JSFiddle',
                 'homepage' => 'https://jsfiddle.net',
+                'consentCategory' => 'preferences',
                 'mode' => EmbedOptions::MODE_FIXED,
                 'height' => 400,
                 'patterns' => ['~^https?://jsfiddle\.net/(?:([\w-]+)/)?(\w+)~i'],
@@ -541,6 +571,7 @@ class Providers extends Component
             'codesandbox' => [
                 'name' => 'CodeSandbox',
                 'homepage' => 'https://codesandbox.io',
+                'consentCategory' => 'preferences',
                 'mode' => EmbedOptions::MODE_FIXED,
                 'height' => 500,
                 'allow' => ['accelerometer', 'camera', 'encrypted-media', 'geolocation', 'gyroscope', 'microphone'],

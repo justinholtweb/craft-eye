@@ -44,6 +44,25 @@ class Provider extends Model
     public string $consentText = '';
 
     /**
+     * The consent category a site's consent manager has to grant before this service may load:
+     * `marketing`, `analytics`, `preferences` or `necessary` (the names Toss and the rest of the
+     * family use). An embed can override it.
+     *
+     * `marketing` unless said otherwise. A video player or a map that sets cookies is tracking
+     * as far as a consent banner is concerned, and erring the other way loads it unasked.
+     */
+    public string $consentCategory = 'marketing';
+
+    /**
+     * The hosts this service's poster images are served from. Eye downloads a poster only from
+     * one of these, so a self-hosted poster can never be used to make the server fetch
+     * something else.
+     *
+     * @var string[]
+     */
+    public array $posterHosts = [];
+
+    /**
      * The generic provider is what an unrecognised URL gets: framed as-is, with no assumptions.
      */
     public function getIsGeneric(): bool

@@ -17,6 +17,7 @@ use justinholtweb\eye\models\FramabilityResult;
 use justinholtweb\eye\models\ProviderMatch;
 use justinholtweb\eye\Plugin;
 use justinholtweb\eye\records\EmbedRecord;
+use Throwable;
 use Twig\Markup;
 
 /**
@@ -445,6 +446,14 @@ class Embed extends Element
             $record->checkMessage = $this->checkMessage;
             $record->checkedAt = Db::prepareDateForDb($this->checkedAt);
             $record->save(false);
+
+            // Fetch the poster now, in the background, so the card has its self-hosted copy
+            // before the first reader arrives. Never a reason for the save itself to fail.
+            try {
+                Plugin::getInstance()->posters->queue(Plugin::getInstance()->posters->sourceFor($this));
+            } catch (Throwable $e) {
+                Craft::warning('Eye could not queue a poster download: ' . $e->getMessage(), Plugin::LOG_CATEGORY);
+            }
         }
 
         parent::afterSave($isNew);

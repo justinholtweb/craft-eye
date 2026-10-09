@@ -227,6 +227,22 @@
             targetPrefix: 'eye-loading-',
         }) }}
 
+        {% set categoryOptions = [{ label: "Provider default ({category})"|t('eye', { category: consentCategories[providerCategory] ?? providerCategory }), value: '' }] %}
+        {% for value, label in consentCategories %}
+            {% set categoryOptions = categoryOptions|merge([{ label: label, value: value }]) %}
+        {% endfor %}
+
+        {{ forms.selectField({
+            label: "Consent category"|t('eye'),
+            instructions: (consentManager == 'none'
+                ? "Which category, granted in a consent manager, opens the click-to-load card by itself. Eye’s settings have no consent manager, so only `Eye.setConsent()` does that."
+                : "Which category, granted in the site’s consent manager, opens the click-to-load card by itself — and withdrawn, puts the card back.")|t('eye'),
+            id: 'consentCategory',
+            name: 'options[consentCategory]',
+            value: options.consentCategory,
+            options: categoryOptions,
+        }) }}
+
         <div id="eye-loading-click" class="{{ options.loading != 'click' ? 'hidden' }}">
             {{ forms.textField({
                 label: "Consent heading"|t('eye'),
@@ -260,6 +276,15 @@
                 value: options.posterUrl,
                 class: 'code',
             }) }}
+
+            {% if posterStatus and posterStatus.state != 'none' %}
+                <p class="{{ posterStatus.state in ['ready', 'local'] ? 'light' : 'warning' }}" data-eye-poster-status="{{ posterStatus.state }}">
+                    {{ posterStatus.message }}
+                    {% if posterStatus.state == 'ready' %}
+                        <a href="{{ posterStatus.url }}" target="_blank" rel="noopener">{{ "View the copy"|t('eye') }}</a>
+                    {% endif %}
+                </p>
+            {% endif %}
 
             {{ forms.lightswitchField({
                 label: "Remember the reader’s choice"|t('eye'),

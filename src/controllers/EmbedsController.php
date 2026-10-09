@@ -105,6 +105,10 @@ class EmbedsController extends Controller
             'sandboxTokens' => EmbedOptions::SANDBOX_TOKENS,
             'allowFeatures' => EmbedOptions::ALLOW_FEATURES,
             'childScriptUrl' => UrlHelper::siteUrl('eye/child.js'),
+            'consentCategories' => $plugin->consent->categoryOptions(),
+            'providerCategory' => $plugin->consent->categoryFor(new EmbedOptions(), $embed->url ? $embed->getProviderMatch() : null),
+            'consentManager' => $plugin->consent->manager(),
+            'posterStatus' => $embed->url ? $plugin->posters->describe($plugin->posters->sourceFor($embed)) : null,
         ]);
     }
 

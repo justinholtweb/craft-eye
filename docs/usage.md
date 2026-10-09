@@ -116,6 +116,12 @@ loads every later embed from the same place. For a "privacy settings" link:
 Eye.forgetConsent();
 ```
 
+**Consent managers.** A card opens by itself when the reader has already granted the embed's
+consent category in Toss, Cookiebot, CookieYes, Klaro or Google Consent Mode. It closes again when
+they withdraw it. The poster behind the card is a copy Eye downloaded into one of your asset
+volumes, so the card itself contacts no one. Both are covered in
+[Consent managers & posters](consent).
+
 **Privacy mode** (on by default) uses a provider's cookie-less option where it has one —
 `youtube-nocookie.com`, Vimeo's `dnt=1`.
 
@@ -222,7 +228,10 @@ picks up embeds added later — live preview, an AJAX tab, infinite scroll — o
 Eye.init(container);   // initialise embeds under an element
 Eye.load(el);          // load a click-to-load embed
 Eye.refresh(el);       // re-measure an auto-height embed
+Eye.unload(el);        // put a click-to-load embed's card back
 Eye.forgetConsent();
+Eye.setConsent('marketing', true);   // the generic consent-manager adapter
+Eye.consent('marketing');            // true, false or null
 ```
 
 `el` is the `.eye` wrapper.

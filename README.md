@@ -135,6 +135,19 @@ each host the embed loads from.
 Eye.forgetConsent(); // for a "privacy settings" link
 ```
 
+**Consent managers.** A card can open by itself when the reader has already agreed in the site's
+consent manager, and close again when they withdraw. Eye defers to [Toss](https://github.com/justinholtweb/craft-toss)
+when its consent kit is on. Otherwise it reads Cookiebot, CookieYes, Klaro or Google Consent Mode.
+For anything else, `Eye.setConsent('marketing', true)` does the same job. Each embed waits for one
+category (`marketing` unless its provider or the embed says otherwise). An optional setting holds
+*every* third-party embed behind a card.
+
+**Self-hosted posters.** A card that hotlinks YouTube's thumbnail has already sent the reader's IP
+address to YouTube. By default Eye downloads each poster once, into an asset volume you choose, and
+the card shows that copy. Until the copy exists, the card has no poster. Downloads come only from
+the providers' image hosts and go through the proxy's fetcher, with all of its rules, and only
+raster images are accepted. Details are in `docs/consent.md`.
+
 ---
 
 ## Knowing when an embed won't work
@@ -285,6 +298,7 @@ php craft eye/embeds/check [--force] [--failOnProblem]
 php craft eye/embeds/inspect <url>                 # what Eye makes of a URL
 php craft eye/embeds/create <url>
 php craft eye/embeds/clear-caches
+php craft eye/embeds/download-posters [--force]    # self-host every embed's poster
 ```
 
 ---
@@ -295,6 +309,10 @@ Presentation settings (stylesheet, runtime, privacy mode, auto-embed) are safe f
 administers the site. The proxy section is a separate decision and is documented as such on the
 screen.
 
+The consent section chooses the consent manager and whether every third-party embed is held. The
+posters section chooses self-hosted, hotlinked or no posters, and the volume, folder and transform
+used for them.
+
 `privacyMode` is on by default: providers use their cookie-less option where they have one
 (`youtube-nocookie.com`, Vimeo's `dnt=1`).
 
@@ -302,13 +320,16 @@ screen.
 
 ## Testing
 
-Integration checks live in `tests/integration/checks.php` (140 checks) and
-`tests/integration/trust.php` (9, a limited CP user and the public proxy route over HTTP), both
-idempotent and self-cleaning. Run from the site root:
+Integration checks live in `tests/integration/checks.php` (140 checks),
+`tests/integration/trust.php` (10, a limited CP user and the public proxy route over HTTP) and
+`tests/integration/privacy.php` (45, consent categories and managers, poster fetching and
+self-hosting). All three are idempotent and self-cleaning. Run them from the site root:
 
 ```sh
 ddev exec php /var/www/craft-eye/tests/integration/checks.php
 ddev exec php /var/www/craft-eye/tests/integration/trust.php
+ddev exec php /var/www/craft-eye/tests/integration/privacy.php
+node --test tests/js/runtime.test.mjs    # the runtime's consent-manager adapters, no dependencies
 ```
 
 `tests/manual/` holds two scripts that need the internet: `live-probe.php` exercises the fetcher

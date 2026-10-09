@@ -43,6 +43,93 @@
 
 <hr>
 
+<h2>{{ 'Consent'|t('eye') }}</h2>
+
+<p class="light">{{ 'A click-to-load card can open by itself when the reader has already said yes in the site’s consent manager, and close again when they withdraw it — so nobody is asked twice.'|t('eye') }}</p>
+
+{{ forms.selectField({
+    label: 'Consent manager'|t('eye'),
+    instructions: (tossActive
+        ? 'Toss is installed with its consent kit on, so Automatic defers to it.'
+        : 'Automatic defers to Toss when its consent kit is on, and otherwise listens for Cookiebot, CookieYes, Klaro or Google Consent Mode on the page. `window.Eye.setConsent(category, granted)` works whatever this says.')|t('eye'),
+    id: 'consentManager',
+    name: 'consentManager',
+    options: consentManagers,
+    value: settings.consentManager,
+    errors: settings.getErrors('consentManager'),
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Hold every third-party embed for consent'|t('eye'),
+    instructions: 'Render every embed that would contact another site as click-to-load, whatever its own loading setting says. With a consent manager, a reader who has already agreed sees no card at all.'|t('eye'),
+    id: 'consentForAllEmbeds',
+    name: 'consentForAllEmbeds',
+    on: settings.consentForAllEmbeds,
+}) }}
+
+<hr>
+
+<h2>{{ 'Posters'|t('eye') }}</h2>
+
+<p class="light">{{ 'A consent card that hotlinks the provider’s thumbnail has already sent the reader’s IP address to the provider before they agreed to anything. Self-hosted posters are downloaded once, on the server, and the card shows that copy instead.'|t('eye') }}</p>
+
+{{ forms.selectField({
+    label: 'Posters'|t('eye'),
+    id: 'posterMode',
+    name: 'posterMode',
+    options: [
+        { label: 'Self-hosted — download a copy; show no poster until it exists'|t('eye'), value: 'local' },
+        { label: 'Hotlinked — load the provider’s image in the reader’s browser'|t('eye'), value: 'remote' },
+        { label: 'None — plain consent cards'|t('eye'), value: 'none' },
+    ],
+    value: settings.posterMode,
+    toggle: true,
+    targetPrefix: 'eye-posters-',
+    errors: settings.getErrors('posterMode'),
+}) }}
+
+<div id="eye-posters-local" class="{{ settings.posterMode != 'local' ? 'hidden' }}">
+    {% if not settings.posterVolume %}
+        <p class="warning">{{ 'Choose a volume. Until then consent cards show no poster.'|t('eye') }}</p>
+    {% endif %}
+
+    {{ forms.selectField({
+        label: 'Poster volume'|t('eye'),
+        instructions: 'Where downloaded posters are saved. It needs public URLs.'|t('eye'),
+        id: 'posterVolume',
+        name: 'posterVolume',
+        options: volumeOptions,
+        value: settings.posterVolume,
+        errors: settings.getErrors('posterVolume'),
+    }) }}
+
+    {{ forms.textField({
+        label: 'Poster folder'|t('eye'),
+        instructions: 'A folder inside that volume. Blank uses the volume’s root.'|t('eye'),
+        id: 'posterFolder',
+        name: 'posterFolder',
+        value: settings.posterFolder,
+        class: 'code',
+        errors: settings.getErrors('posterFolder'),
+    }) }}
+
+    {{ forms.selectField({
+        label: 'Poster transform'|t('eye'),
+        instructions: 'An image transform applied to every poster.'|t('eye'),
+        id: 'posterTransform',
+        name: 'posterTransform',
+        options: transformOptions,
+        value: settings.posterTransform,
+    }) }}
+
+    <p class="light">
+        {{ 'Posters are only ever downloaded from these hosts: {hosts}, plus the proxy’s allowed hosts while the proxy is on. To fetch them for existing embeds, run:'|t('eye', { hosts: posterHosts|join(', ') }) }}
+        <code>php craft eye/embeds/download-posters</code>
+    </p>
+</div>
+
+<hr>
+
 <h2>{{ 'Framing checks'|t('eye') }}</h2>
 
 <p class="light">{{ 'A page that refuses to be framed does not say so — the browser blocks it and leaves a blank rectangle. Eye asks the URL directly, so an author finds out while they are editing rather than after publishing.'|t('eye') }}</p>

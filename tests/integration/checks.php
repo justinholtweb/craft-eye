@@ -1310,11 +1310,15 @@ check('a width cannot smuggle in other CSS declarations', function() {
 });
 
 check('a poster URL cannot leave its CSS url()', function() use ($plugin) {
+    // Hotlinked, so the remote URL reaches the style attribute at all; a self-hosted copy's URL
+    // goes through the same escaping.
+    $plugin->getSettings()->posterMode = 'remote';
     $script = EmbedOptions::fromArray(['posterUrl' => 'javascript:alert(1)']);
     $html = (string)$plugin->renderer->renderUrl('https://example.com/', EmbedOptions::fromArray([
         'loading' => 'click',
         'posterUrl' => 'https://example.com/a.jpg);background:url(https://evil.test/x',
     ]));
+    $plugin->getSettings()->posterMode = 'local';
 
     return $script->posterUrl === '' && !str_contains($html, ');background') && str_contains($html, '%29%3Bbackground')
         ?: 'got ' . (preg_match('/style="[^"]*"/', $html, $m) ? $m[0] : substr($html, 0, 300));

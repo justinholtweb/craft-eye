@@ -164,6 +164,24 @@ check('an existing embed opens for editing', function() use ($http, $user, $run,
         ?: 'status ' . $response->getStatusCode() . (str_contains($body, 'Twig') ? ', a Twig error' : '');
 });
 
+check('the edit screen offers a consent category and says where the poster comes from', function() use ($http, &$embed) {
+    $youtube = Plugin::getInstance()->embeds->createFromUrl('https://youtu.be/dQw4w9WgXcQ', ['loading' => 'click']);
+    $youtube->handle = $embed->handle . '-yt';
+    Craft::$app->getElements()->saveElement($youtube, false);
+
+    try {
+        $body = (string)$http->get("admin/eye/embeds/$youtube->id")->getBody();
+    } finally {
+        Craft::$app->getElements()->deleteElement($youtube, true);
+        Craft::$app->getDb()->createCommand()->delete('{{%eye_posters}}', ['urlHash' => sha1('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')])->execute();
+    }
+
+    return str_contains($body, 'name="options[consentCategory]"')
+        && str_contains($body, 'Provider default (Marketing)')
+        && preg_match('/data-eye-poster-status="(unconfigured|pending|failed|ready|remote|off)"/', $body)
+        ?: 'missing the category select or the poster status';
+});
+
 echo "\nThe public proxy route\n";
 
 check('an address over its budget is refused before anything else happens', function() use ($rateKeys) {

@@ -10,6 +10,7 @@ use craft\helpers\UrlHelper;
 use craft\web\View;
 use justinholtweb\eye\elements\Embed;
 use justinholtweb\eye\models\EmbedOptions;
+use justinholtweb\eye\models\ProviderMatch;
 use justinholtweb\eye\Plugin;
 use justinholtweb\eye\web\assets\runtime\RuntimeAsset;
 use Throwable;
@@ -85,6 +86,17 @@ class Renderer extends Component
         }
 
         $embedUrl = $match->embedUrl ?? $url;
+
+        // "Hold every third-party embed for consent" overrides the embed's own loading setting,
+        // for every frame that would reach another origin. A proxied frame is on this origin but
+        // still carries the other site's images and links. Inline mode has no frame to hold.
+        if (
+            $plugin->getSettings()->consentForAllEmbeds
+            && $options->mode !== EmbedOptions::MODE_INLINE
+            && ($options->mode === EmbedOptions::MODE_PROXY || !$this->isSameOrigin($embedUrl))
+        ) {
+            $options = $options->merge(['loading' => EmbedOptions::LOADING_CLICK]);
+        }
         $id = Html::id((string)($context['id'] ?? sprintf('eye-%s', $context['handle'] ?? ++$this->counter)));
 
         $variables = array_merge([
@@ -102,7 +114,7 @@ class Renderer extends Component
             'frameAttributes' => $this->frameAttributes($options, $context),
             'wrapperStyle' => $this->wrapperStyle($options),
             'classes' => $this->classes($options, $match?->provider->handle ?? 'generic'),
-            'config' => $this->runtimeConfig($options, $embedUrl),
+            'config' => $this->runtimeConfig($options, $embedUrl, $match),
             'consent' => $this->consent($options, $match, $url),
             'fallback' => $this->fallback($options, $match, $url, (string)($context['label'] ?? '')),
             'inlineHtml' => null,
@@ -225,7 +237,7 @@ class Renderer extends Component
      * Only what the runtime actually reads. Everything presentational has already become CSS by
      * the time it gets here, and shipping the rest would put an author's notes in the page.
      */
-    private function runtimeConfig(EmbedOptions $options, string $embedUrl): string
+    private function runtimeConfig(EmbedOptions $options, string $embedUrl, ?ProviderMatch $match = null): string
     {
         $config = [
             'mode' => $options->mode,
@@ -251,9 +263,19 @@ class Renderer extends Component
         }
 
         if ($options->loading === EmbedOptions::LOADING_CLICK) {
+            $consent = Plugin::getInstance()->consent;
+
             $config['consent'] = [
                 'remember' => $options->rememberConsent,
                 'key' => $options->rememberConsent ? 'eye:consent:' . parse_url($embedUrl, PHP_URL_HOST) : null,
+                // What the site's consent manager has to grant for the card to open by itself,
+                // and which manager to listen to. Both are facts about the site, not the reader,
+                // so they are safe in a statically cached page; the reader's answer is only ever
+                // read in the browser.
+                'category' => $consent->categoryFor($options, $match),
+                'manager' => $consent->manager(),
+                // Klaro consents per service; a service named after the provider wins there.
+                'provider' => $match?->provider->handle ?? 'generic',
             ];
         }
 
@@ -290,7 +312,9 @@ class Renderer extends Component
             'text' => $options->consentText
                 ?: ($provider?->consentText ?: Craft::t('eye', 'This content is hosted by {name}. Loading it will share your IP address with them.', ['name' => $name])),
             'button' => $options->consentButtonLabel ?: Craft::t('eye', 'Load content'),
-            'poster' => $this->cssUrl($options->posterUrl ?: ($match->posterUrl ?? '')),
+            // Through Posters: a self-hosted copy, or nothing — a hotlinked thumbnail would hand
+            // the reader to the provider before they have agreed to anything.
+            'poster' => $this->cssUrl(Plugin::getInstance()->posters->displayUrl($options->posterUrl ?: ($match->posterUrl ?? ''))),
             'name' => $name,
         ];
     }
@@ -315,12 +339,14 @@ class Renderer extends Component
     }
 
     /**
-     * A URL that is safe inside CSS `url(…)` in a `style` attribute: http(s) only, with every
+     * A URL that is safe inside CSS `url(…)` in a `style` attribute: http(s) or root-relative, with every
      * character that could close the `url()` or the declaration percent-encoded.
      */
     private function cssUrl(string $url): string
     {
-        if ($url === '' || !EmbedOptions::isHttpUrl($url)) {
+        // http(s), or a root-relative path on this site — a self-hosted poster in a volume whose
+        // base URL is `/uploads` comes back like that. Never `//host`, which is another origin.
+        if ($url === '' || (!EmbedOptions::isHttpUrl($url) && !preg_match('~^/(?![/\\\\])~', $url))) {
             return '';
         }
 

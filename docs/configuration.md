@@ -17,6 +17,12 @@ administers the site; the proxy section is a separate decision and the screen sa
 | — | `defaultOptions` | `[]` | [Embed options](#embed-options) every new embed starts from. Config file only |
 | Privacy mode | `privacyMode` | `true` | Uses a provider's cookie-less option where it has one — `youtube-nocookie.com`, Vimeo's `dnt=1` |
 | Auto-embed URLs on save | `autoembed` | `false` | Turns a bare URL on its own line in a rich-text field into an embed when the element is saved. For imports, feeds and the Element API; the editors already do this at paste time |
+| Consent manager | `consentManager` | `'auto'` | Which consent manager opens click-to-load cards: `auto` (Toss if its consent kit is on, otherwise whichever the page has), `toss`, `cookiebot`, `cookieyes`, `klaro`, `consentmode` or `none`. See [Consent managers & posters](consent) |
+| Hold every third-party embed for consent | `consentForAllEmbeds` | `false` | Renders every embed that would reach another site as click-to-load, whatever its own loading setting |
+| Posters | `posterMode` | `'local'` | `local`: show a copy downloaded into the poster volume, or no poster until it exists. `remote`: hotlink the provider's image. `none`: no posters |
+| Poster volume | `posterVolume` | `null` | UID (or handle) of the volume self-hosted posters are saved to. Needs public URLs |
+| Poster folder | `posterFolder` | `'eye-posters'` | Folder inside that volume. Blank uses the root |
+| Poster transform | `posterTransform` | `null` | Handle of a named image transform applied to self-hosted posters |
 | Check whether URLs allow framing | `checkFramability` | `true` | Reads `X-Frame-Options` and `frame-ancestors` when an embed is saved |
 | Framability cache duration | `framabilityCacheDuration` | `86400` | Seconds a verdict is kept. An *Unreachable* verdict is kept for 5 minutes at most |
 | Enable the proxy | `proxyEnabled` | `false` | Lets proxy and inline modes fetch anything at all. See [Proxy & inline modes](proxy) |
@@ -84,8 +90,9 @@ The same options are used by library embeds, Embed field values, reference tags,
 | `consentTitle` | | Tag | Click-to-load card heading |
 | `consentText` | | Tag | Click-to-load card text. Providers supply one |
 | `consentButtonLabel` | | Tag | Click-to-load button |
-| `posterUrl` | | | Image behind the consent card. `http(s)` only |
+| `posterUrl` | | | Image behind the consent card. `http(s)` only. Self-hosted from the provider registry's poster hosts unless posters are set to hotlinked |
 | `rememberConsent` | `false` | Tag | Remember the reader's choice in `localStorage` |
+| `consentCategory` | | | `marketing`, `analytics`, `preferences` or `necessary`: what a consent manager has to grant for the card to open by itself. Blank uses the provider's (`marketing` unless the provider says otherwise) |
 | `sandbox` | `null` | | Array of `allow-*` tokens. `null` omits the attribute; `[]` is the strictest sandbox |
 | `allow` | `[]` | | Permissions-Policy features, such as `autoplay`, `fullscreen`, `clipboard-write` |
 | `allowFullscreen` | `true` | | Adds `fullscreen` to `allow` |
@@ -120,6 +127,8 @@ php craft eye/embeds/check --failOnProblem         # exit non-zero if any refuse
 php craft eye/embeds/inspect <url>                 # what Eye makes of a URL; saves nothing
 php craft eye/embeds/create <url>                  # add a URL to the library, print its tag
 php craft eye/embeds/clear-caches                  # forget cached proxy pages and framing verdicts
+php craft eye/embeds/download-posters              # download every embed's poster into the poster volume
+php craft eye/embeds/download-posters --force      # download them again, replacing the copies
 ```
 
 `check` skips proxy and inline embeds: the browser never frames them, so a framing header says

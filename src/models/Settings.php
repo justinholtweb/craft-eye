@@ -40,6 +40,47 @@ class Settings extends Model
      */
     public bool $autoembed = false;
 
+    // Consent
+    // -------------------------------------------------------------------------
+
+    /**
+     * Which consent manager unlocks click-to-load embeds.
+     *
+     * `auto` defers to Toss when it is installed with its consent kit on, and otherwise listens
+     * for whichever of Cookiebot, CookieYes, Klaro or Google Consent Mode the page turns out to
+     * have. `none` leaves every embed to its own click. `window.Eye.setConsent()` works whatever
+     * this says.
+     */
+    public string $consentManager = 'auto';
+
+    /**
+     * Hold every third-party embed behind a consent card, whatever its own loading setting says,
+     * so nothing is requested until the reader clicks or the consent manager says yes.
+     */
+    public bool $consentForAllEmbeds = false;
+
+    // Posters
+    // -------------------------------------------------------------------------
+
+    /**
+     * What the consent card shows behind itself.
+     *
+     * `local` (the default) shows a copy Eye downloaded into {@see self::$posterVolume}, and no
+     * poster at all until there is one: a card that hotlinks the provider's thumbnail has handed
+     * the reader's IP address to the provider before they agreed to anything. `remote` hotlinks
+     * it anyway, and `none` never shows one.
+     */
+    public string $posterMode = 'local';
+
+    /** The UID of the asset volume self-hosted posters are saved to. */
+    public ?string $posterVolume = null;
+
+    /** The folder inside that volume. */
+    public string $posterFolder = 'eye-posters';
+
+    /** A named image transform to apply to self-hosted posters. Blank serves the original. */
+    public ?string $posterTransform = null;
+
     // Framability
     // -------------------------------------------------------------------------
 
@@ -113,7 +154,7 @@ class Settings extends Model
             [
                 [
                     'registerCss', 'registerJs', 'privacyMode', 'autoembed', 'checkFramability',
-                    'proxyEnabled', 'proxyStripScripts',
+                    'proxyEnabled', 'proxyStripScripts', 'consentForAllEmbeds',
                 ],
                 'boolean',
             ],
@@ -124,6 +165,10 @@ class Settings extends Model
             [['proxyUserAgent', 'purifierConfig'], 'string'],
             [['defaultOptions'], 'safe'],
             [['allowedHosts'], 'validateAllowedHosts', 'skipOnEmpty' => false],
+            [['consentManager'], 'in', 'range' => \justinholtweb\eye\services\Consent::MANAGERS],
+            [['posterMode'], 'in', 'range' => \justinholtweb\eye\services\Posters::MODES],
+            [['posterVolume', 'posterTransform'], 'string'],
+            [['posterFolder'], 'validatePosterFolder', 'skipOnEmpty' => false],
         ];
     }
 
@@ -167,6 +212,23 @@ class Settings extends Model
         }
     }
 
+    /**
+     * A folder path inside the poster volume: segments of letters, digits, dashes and
+     * underscores. Never `..`, never absolute.
+     */
+    public function validatePosterFolder(string $attribute): void
+    {
+        $folder = trim(str_replace('\\', '/', $this->posterFolder), "/ \t\n\r");
+
+        if ($folder !== '' && !preg_match('~^[\w-]+(/[\w-]+)*$~', $folder)) {
+            $this->addError($attribute, Craft::t('eye', 'Use folder names made of letters, numbers, dashes and underscores, separated by slashes.'));
+
+            return;
+        }
+
+        $this->posterFolder = $folder;
+    }
+
     /** Set by {@see self::validateAllowedHosts()}; shown on the settings screen, not an error. */
     public ?string $addWarning = null;
 
@@ -188,6 +250,12 @@ class Settings extends Model
             'proxyUserAgent' => Craft::t('eye', 'Proxy user agent'),
             'proxyStripScripts' => Craft::t('eye', 'Strip scripts from proxied HTML'),
             'purifierConfig' => Craft::t('eye', 'HTML Purifier config'),
+            'consentManager' => Craft::t('eye', 'Consent manager'),
+            'consentForAllEmbeds' => Craft::t('eye', 'Hold every third-party embed for consent'),
+            'posterMode' => Craft::t('eye', 'Posters'),
+            'posterVolume' => Craft::t('eye', 'Poster volume'),
+            'posterFolder' => Craft::t('eye', 'Poster folder'),
+            'posterTransform' => Craft::t('eye', 'Poster transform'),
         ];
     }
 

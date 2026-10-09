@@ -8,6 +8,7 @@ use justinholtweb\eye\elements\Embed;
 use justinholtweb\eye\models\EmbedOptions;
 use justinholtweb\eye\models\FramabilityResult;
 use justinholtweb\eye\Plugin;
+use justinholtweb\eye\services\Posters;
 use Throwable;
 use yii\console\ExitCode;
 
@@ -35,6 +36,10 @@ class EmbedsController extends Controller
         if ($actionID === 'check') {
             $options[] = 'force';
             $options[] = 'failOnProblem';
+        }
+
+        if ($actionID === 'download-posters') {
+            $options[] = 'force';
         }
 
         return $options;
@@ -190,6 +195,45 @@ class EmbedsController extends Controller
         }
 
         return ExitCode::OK;
+    }
+
+    /**
+     * Download every embed's poster into the poster volume, so consent cards stop hotlinking the
+     * provider. `--force` downloads again over copies that already exist.
+     */
+    public function actionDownloadPosters(): int
+    {
+        $posters = Plugin::getInstance()->posters;
+
+        if (!$posters->getVolume()) {
+            $this->stderr("No poster volume is set. Choose one in Eye's settings first.\n", Console::FG_RED);
+
+            return ExitCode::CONFIG;
+        }
+
+        if ($posters->mode() !== Posters::MODE_LOCAL) {
+            $this->stdout("Posters are not set to self-hosted, so these copies will not be shown until they are.\n\n", Console::FG_YELLOW);
+        }
+
+        $counts = $posters->downloadAll($this->force, function(string $url, string $label, string $state, string $detail) {
+            $this->stdout(sprintf('%-30s ', $this->truncate($label !== '' ? $label : $url, 30)));
+            $this->stdout(str_pad($state, 11), match ($state) {
+                'downloaded', 'existing' => Console::FG_GREEN,
+                'failed' => Console::FG_RED,
+                default => Console::FG_GREY,
+            });
+            $this->stdout(" $detail\n", Console::FG_GREY);
+        });
+
+        $this->stdout(sprintf(
+            "\n%d downloaded, %d already self-hosted, %d skipped, %d failed.\n",
+            $counts['downloaded'],
+            $counts['existing'],
+            $counts['skipped'],
+            $counts['failed'],
+        ));
+
+        return $counts['failed'] > 0 ? ExitCode::UNAVAILABLE : ExitCode::OK;
     }
 
     /**

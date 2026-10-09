@@ -62,6 +62,18 @@ It does the technical part properly: nothing is requested from the third party u
 clicks, because the iframe sits in a `<template>` rather than a hidden frame. The wording, and
 whether a click on an embed counts as consent for your purposes, are yours to decide.
 
+## Will readers be asked twice if the site already has a cookie banner?
+
+No. Connect the banner under **Consent manager**: Toss, Cookiebot, CookieYes, Klaro and Google
+Consent Mode are supported, and `Eye.setConsent()` covers anything else. A card whose category the
+reader has already granted opens on its own. See [Consent managers & posters](consent).
+
+## Does the consent card itself contact YouTube?
+
+Not by default. The poster is a copy Eye downloaded into your own asset volume. Until that copy
+exists, the card has no poster. Choose a **Poster volume** in the settings, or the cards stay
+plain.
+
 ## Does privacy mode stop all tracking?
 
 No. It uses a provider's reduced-cookie option where one exists — `youtube-nocookie.com`, Vimeo's

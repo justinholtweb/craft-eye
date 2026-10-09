@@ -17,9 +17,11 @@ use justinholtweb\eye\elements\Embed;
 use justinholtweb\eye\fields\EmbedField;
 use justinholtweb\eye\fields\EmbedsField;
 use justinholtweb\eye\models\Settings;
+use justinholtweb\eye\services\Consent;
 use justinholtweb\eye\services\Embeds;
 use justinholtweb\eye\services\Fetcher;
 use justinholtweb\eye\services\Framability;
+use justinholtweb\eye\services\Posters;
 use justinholtweb\eye\services\Providers;
 use justinholtweb\eye\services\Proxy;
 use justinholtweb\eye\services\ProxyRoutes;
@@ -42,6 +44,8 @@ use yii\base\Event;
  * @property-read Framability $framability
  * @property-read Proxy $proxy
  * @property-read ProxyRoutes $proxyRoutes
+ * @property-read Consent $consent
+ * @property-read Posters $posters
  * @property-read Settings $settings
  *
  * @method Settings getSettings()
@@ -55,7 +59,7 @@ class Plugin extends BasePlugin
     /** Log category used by everything in the plugin. */
     public const LOG_CATEGORY = 'eye';
 
-    public string $schemaVersion = '1.0.0';
+    public string $schemaVersion = '1.1.0';
 
     public bool $hasCpSection = true;
 
@@ -72,6 +76,8 @@ class Plugin extends BasePlugin
                 'framability' => Framability::class,
                 'proxy' => Proxy::class,
                 'proxyRoutes' => ProxyRoutes::class,
+                'consent' => Consent::class,
+                'posters' => Posters::class,
             ],
         ];
     }
@@ -122,7 +128,46 @@ class Plugin extends BasePlugin
             'plugin' => $this,
             'purifierConfigs' => $this->purifierConfigOptions(),
             'childScriptUrl' => \craft\helpers\UrlHelper::siteUrl('eye/child.js'),
+            'consentManagers' => $this->consent->managerOptions(),
+            'tossActive' => $this->consent->tossIsActive(),
+            'volumeOptions' => $this->volumeOptions(),
+            'transformOptions' => $this->transformOptions(),
+            'posterHosts' => $this->providers->posterHosts(),
         ]);
+    }
+
+    /** @return array<int, array{label: string, value: string}> */
+    private function volumeOptions(): array
+    {
+        $options = [['label' => Craft::t('eye', 'None — no self-hosted posters'), 'value' => '']];
+
+        foreach (Craft::$app->getVolumes()->getAllVolumes() as $volume) {
+            try {
+                $hasUrls = $volume->getFs()->getRootUrl() !== null;
+            } catch (\Throwable) {
+                $hasUrls = false;
+            }
+
+            // A poster in a volume without public URLs can never be shown, so say so up front.
+            $options[] = [
+                'label' => $volume->name . ($hasUrls ? '' : ' ' . Craft::t('eye', '(no public URLs)')),
+                'value' => (string)$volume->uid,
+            ];
+        }
+
+        return $options;
+    }
+
+    /** @return array<int, array{label: string, value: string}> */
+    private function transformOptions(): array
+    {
+        $options = [['label' => Craft::t('eye', 'None — the original image'), 'value' => '']];
+
+        foreach (Craft::$app->getImageTransforms()->getAllTransforms() as $transform) {
+            $options[] = ['label' => (string)$transform->name, 'value' => (string)$transform->handle];
+        }
+
+        return $options;
     }
 
     /** @return array<string, string> */

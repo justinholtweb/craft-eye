@@ -2,6 +2,39 @@
 
 All notable changes to Eye are documented here.
 
+## Unreleased
+
+> {warning} Consent cards no longer hotlink the provider's poster. Choose a **Poster volume** under
+> **Settings → Plugins → Eye → Posters** so Eye can download a copy there. Until you do, cards show
+> no poster. To keep the old behaviour, set **Posters** to **Hotlinked**.
+
+### Added
+
+- Consent-manager integration. A click-to-load card opens by itself when the reader has granted the
+  embed's consent category, and goes back when they withdraw it. Eye defers to Toss, through its
+  consent API, when Toss's consent kit is on. Otherwise it reads Cookiebot, CookieYes, Klaro or
+  Google Consent Mode.
+- `Eye.setConsent(category, granted)` and `Eye.consent(category)`, so any other consent manager can
+  be connected. Also `Eye.unload(el)`.
+- A **Consent category** on every embed (`marketing`, `analytics`, `preferences` or `necessary`),
+  with provider defaults. Reference tags and Embed fields can't change it.
+- **Hold every third-party embed for consent**: renders every cross-origin or proxied embed as
+  click-to-load.
+- Self-hosted posters. Eye downloads each poster once into an asset volume, using a queue job when
+  an embed is saved or when a card first renders, and the card shows that copy. Downloads go
+  through the SSRF-guarded fetcher. They are limited to the provider registry's poster hosts
+  (plus the proxy's allowlist while the proxy is on) and to raster images up to 5 MB. SVGs are
+  refused.
+- New settings: **Posters** (self-hosted, hotlinked or none), **Poster volume**, **Poster folder**
+  and **Poster transform**.
+- `php craft eye/embeds/download-posters [--force]`.
+- The embed edit screen says where the poster comes from, and why when it isn't shown.
+
+### Changed
+
+- The click-to-load card shows no poster until a self-hosted copy exists. It used to hotlink the
+  provider's image.
+
 ## 5.0.0 — 2026-08-18
 
 Initial release. Versioned 5.x to match the Craft major it targets, as the rest of this plugin

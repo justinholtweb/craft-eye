@@ -34,6 +34,10 @@ use yii\base\Exception;
  * 7. Nothing of the reader's is forwarded — no cookies, no auth, no client IP, no referer.
  * 8. Only Eye's own user agent goes out.
  * 9. The caller cannot pass a URL straight from a request; it comes from a stored embed.
+ *
+ * Three callers: the proxy ({@see self::fetch()}, the site's allowlist), the framability probe
+ * ({@see self::probe()}, headers only), and self-hosted posters ({@see self::fetchImage()}, the
+ * provider registry's poster hosts and raster images only).
  */
 class Fetcher extends Component
 {
@@ -76,12 +80,58 @@ class Fetcher extends Component
         ]);
     }
 
+    /**
+     * Fetch a poster image for the click-to-load card, so it can be served from this site.
+     *
+     * The proxy's allowlist is not the fence here — posters are wanted whether or not the proxy is
+     * on — so the caller names the hosts, and {@see Posters} only ever names the provider
+     * registry's poster hosts (plus the proxy's own allowlist when the proxy is on). Every other
+     * rule holds: public addresses only, the connection pinned, redirects re-checked against the
+     * same short list at every hop, and the response capped by size, time and content type —
+     * raster images only. An SVG is a document that can carry script, and is refused.
+     *
+     * @param string[] $hosts Exact hosts, or `*.example.com`.
+     * @throws Exception
+     */
+    public function fetchImage(string $url, array $hosts, int $maxBytes): FetchResult
+    {
+        if (!$hosts) {
+            throw new Exception(Craft::t('eye', 'Eye has no hosts it may download posters from.'));
+        }
+
+        return $this->request($url, 3, [
+            'hosts' => $hosts,
+            'maxBytes' => $maxBytes,
+            'timeout' => 10,
+            'accept' => 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9',
+            'contentTypes' => '~^image/(jpeg|png|webp|gif|avif)$~',
+        ]);
+    }
+
     /** Whether a host is one the site has allowed. */
     public function hostIsAllowed(string $host): bool
     {
+        return self::hostMatches($host, Plugin::getInstance()->getSettings()->allowedHosts);
+    }
+
+    /**
+     * Whether `$host` is on `$list`: exact, or `*.example.com`, which also covers the apex.
+     *
+     * @param array<int, mixed> $list
+     */
+    public static function hostMatches(string $host, array $list): bool
+    {
         $host = strtolower(trim($host, " \t\n\r\0\x0B[]."));
 
-        foreach (Plugin::getInstance()->getSettings()->allowedHosts as $allowed) {
+        if ($host === '') {
+            return false;
+        }
+
+        foreach ($list as $allowed) {
+            if (!is_string($allowed)) {
+                continue;
+            }
+
             $allowed = strtolower(trim($allowed));
 
             if ($allowed === '') {
@@ -138,7 +188,13 @@ class Fetcher extends Component
 
         $host = strtolower($parts['host']);
 
-        if (empty($options['skipAllowlist']) && !$this->hostIsAllowed($host)) {
+        // A caller-supplied list (posters) replaces the site's allowlist rather than widening it:
+        // a poster may come from YouTube's image host and nowhere else, whatever the proxy allows.
+        if (isset($options['hosts'])) {
+            if (!self::hostMatches($host, (array)$options['hosts'])) {
+                throw new Exception(Craft::t('eye', '{host} is not a host Eye downloads posters from.', ['host' => $host]));
+            }
+        } elseif (empty($options['skipAllowlist']) && !$this->hostIsAllowed($host)) {
             throw new Exception(Craft::t('eye', '{host} is not in Eye’s allowed hosts.', ['host' => $host]));
         }
 
@@ -185,7 +241,7 @@ class Fetcher extends Component
                 'timeout' => $timeout,
                 'headers' => [
                     'User-Agent' => $settings->proxyUserAgent,
-                    'Accept' => 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1',
+                    'Accept' => $options['accept'] ?? 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1',
                     'Accept-Language' => 'en',
                 ],
                 'on_headers' => function(ResponseInterface $response) use (&$headers, &$tooLarge, $headersOnly, $maxBytes) {
@@ -281,7 +337,16 @@ class Fetcher extends Component
             throw new Exception(Craft::t('eye', '{host} answered {status}.', ['host' => $host, 'status' => $status]));
         }
 
-        if ($contentType !== '' && !preg_match('~^(text/html|application/xhtml\+xml|text/plain)$~', $contentType)) {
+        if (isset($options['contentTypes'])) {
+            // A typed fetch needs the type stated: an image with no Content-Type is not trusted
+            // to be one.
+            if (!preg_match($options['contentTypes'], $contentType)) {
+                throw new Exception(Craft::t('eye', '{host} returned {type}, which is not a type Eye accepts here.', [
+                    'host' => $host,
+                    'type' => $contentType !== '' ? $contentType : Craft::t('eye', 'no content type'),
+                ]));
+            }
+        } elseif ($contentType !== '' && !preg_match('~^(text/html|application/xhtml\+xml|text/plain)$~', $contentType)) {
             throw new Exception(Craft::t('eye', 'Eye only proxies HTML, and {host} returned {type}.', [
                 'host' => $host,
                 'type' => $contentType,

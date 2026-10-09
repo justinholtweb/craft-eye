@@ -107,6 +107,12 @@ class EmbedOptions extends Model
         'xr-spatial-tracking',
     ];
 
+    /**
+     * The consent categories an embed can wait for. The names Toss and the rest of the family use,
+     * and the four every consent manager has an equivalent of.
+     */
+    public const CONSENT_CATEGORIES = ['necessary', 'preferences', 'analytics', 'marketing'];
+
     public const REFERRER_POLICIES = [
         'no-referrer',
         'no-referrer-when-downgrade',
@@ -124,7 +130,8 @@ class EmbedOptions extends Model
      * Anyone who can type into a rich-text field can write a reference tag, and Craft's ref-tag
      * pattern allows almost any character in it — so a tag may only change where and how an
      * embed sits on the page, never what it runs: no fallback markup, no CSS, no sandbox, no
-     * proxy rules. Those belong to whoever manages the library embed.
+     * proxy rules, and no consent category (`necessary` would load it without asking). Those
+     * belong to whoever manages the library embed.
      */
     public const REF_TAG_KEYS = [
         'mode', 'ratio', 'height', 'minHeight', 'maxHeight', 'width', 'align', 'className',
@@ -222,6 +229,12 @@ class EmbedOptions extends Model
     /** Remember the reader's choice for this provider in `localStorage`. */
     public bool $rememberConsent = false;
 
+    /**
+     * Which consent category, granted in the site's consent manager, unlocks this embed without
+     * a click — and revoked, locks it again. Blank uses the provider's.
+     */
+    public string $consentCategory = '';
+
     // Security
     // -------------------------------------------------------------------------
 
@@ -295,6 +308,7 @@ class EmbedOptions extends Model
             [['scrolling'], 'in', 'range' => ['auto', 'yes', 'no']],
             [['linkTarget'], 'in', 'range' => ['blank', 'self', 'parent']],
             [['referrerPolicy'], 'in', 'range' => self::REFERRER_POLICIES],
+            [['consentCategory'], 'in', 'range' => self::CONSENT_CATEGORIES, 'skipOnEmpty' => true],
             [['height', 'minHeight', 'maxHeight', 'timeout'], 'integer', 'min' => 0],
             [['cacheDuration'], 'integer', 'min' => 0],
             [['ratio'], 'match', 'pattern' => '/^\d+(\.\d+)?\s*[:\/]\s*\d+(\.\d+)?$/', 'skipOnEmpty' => true],
@@ -370,6 +384,7 @@ class EmbedOptions extends Model
                 'ratio' => $this->ratio = self::normalizeRatio((string)$value) ?? $this->ratio,
                 'referrerPolicy' => $this->referrerPolicy = in_array($value, self::REFERRER_POLICIES, true) ? (string)$value : $this->referrerPolicy,
                 'scrolling' => $this->scrolling = in_array($value, ['auto', 'yes', 'no'], true) ? (string)$value : $this->scrolling,
+                'consentCategory' => $this->consentCategory = in_array($value, self::CONSENT_CATEGORIES, true) ? (string)$value : '',
                 'linkTarget' => $this->linkTarget = in_array($value, ['blank', 'self', 'parent'], true) ? (string)$value : $this->linkTarget,
                 // The values below end up inside a `style` attribute, a CSS `url()` or a
                 // `<style>` element, where HTML escaping is no protection at all.
